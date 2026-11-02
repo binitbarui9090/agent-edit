@@ -1,6 +1,7 @@
 import { ID_PREFIXES } from '@agent-edit/shared';
 import { z } from 'zod';
 import { idSchema, positiveTicksSchema, shortTicksSchema, ticksSchema } from './common.js';
+import { frameRateSchema } from './project.js';
 
 export const TRACK_TYPES = ['VIDEO', 'BROLL', 'AUDIO', 'MUSIC', 'CAPTIONS', 'OVERLAYS'] as const;
 export const trackTypeSchema = z.enum(TRACK_TYPES);
@@ -99,3 +100,12 @@ export const timelineTrackSchema = z.strictObject({
   clips: z.array(timelineClipSchema),
 });
 export type TimelineTrack = z.infer<typeof timelineTrackSchema>;
+
+/** Everything the reducer works on. Identity and bookkeeping live on the stored document. */
+export const timelineStateSchema = z.object({
+  frameRate: frameRateSchema,
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  tracks: z.array(timelineTrackSchema),
+});
+export type TimelineState = z.infer<typeof timelineStateSchema>;

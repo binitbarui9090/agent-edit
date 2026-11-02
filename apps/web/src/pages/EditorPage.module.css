@@ -1,0 +1,150 @@
+/* Flex, not grid rows: the error bar comes and goes, and must not shift which row a panel lands in. */
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--bar-height));
+  overflow: hidden;
+}
+
+.editor > section[aria-label='Timeline'] {
+  /* Six rows, the ruler and a horizontal scrollbar, so every track shows without scrolling. */
+  flex: 0 1 306px;
+  min-height: 160px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 14px;
+  min-height: 36px;
+  padding: 2px 12px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+}
+
+.crumbs {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.crumbs a {
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+}
+
+.crumbs a:hover {
+  color: var(--text-1);
+}
+
+.tools {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 2px;
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 6px;
+  background: var(--line-strong);
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.zoom input {
+  width: 110px;
+  accent-color: var(--accent);
+}
+
+.state {
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 12px;
+  background: var(--danger-bg);
+}
+
+.upper {
+  flex: 1 1 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 280px;
+  min-height: 180px;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-1);
+  border-left: 1px solid var(--line);
+}
+
+.tabs {
+  display: flex;
+  flex: none;
+  gap: 14px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab {
+  padding: 7px 0 6px;
+  margin-bottom: -1px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.tab[data-active='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--text-1);
+}
+
+.panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (max-width: 960px) {
+  .editor {
+    height: auto;
+    min-height: calc(100dvh - var(--bar-height));
+    overflow: visible;
+  }
+
+  .upper {
+    flex: none;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(220px, 42vh) auto auto;
+  }
+
+  .upper > :first-child {
+    order: 2;
+    max-height: 200px;
+  }
+}

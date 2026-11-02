@@ -16,7 +16,7 @@
     "build": "tsc -b && npm run build -w @agent-edit/web",
     "typecheck": "tsc -b && tsc -p apps/web/tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
-    "test:e2e": "node e2e/walkthrough.mjs && node --env-file-if-exists=.env e2e/media.mjs",
+    "test:e2e": "node e2e/walkthrough.mjs && node --env-file-if-exists=.env e2e/media.mjs && node e2e/editor.mjs",
     "test:long": "node --env-file-if-exists=.env e2e/long-recording.mjs",
     "format": "prettier --write ."
   },

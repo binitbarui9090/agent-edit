@@ -149,7 +149,6 @@ export function MediaLibraryPage() {
         <Pending
           title="Not built yet"
           items={[
-            { name: 'Timeline editor', phase: 3, detail: 'Multi-track editing and playback.' },
             { name: 'AI analysis and agent', phase: 4, detail: 'Transcripts and edit plans.' },
             { name: 'Render and export', phase: 5, detail: 'Final video output.' },
           ]}

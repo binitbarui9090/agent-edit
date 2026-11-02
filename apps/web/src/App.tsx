@@ -3,6 +3,7 @@ import { useMe } from './api/auth';
 import { AppShell } from './components/AppShell';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { EditorPage } from './pages/EditorPage';
 import { NewProjectPage } from './pages/NewProjectPage';
 import { MediaLibraryPage } from './pages/MediaLibraryPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -37,6 +38,8 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/projects/new" element={<NewProjectPage />} />
+        <Route path="/projects/:id/edit" element={<EditorPage />} />
+        <Route path="/projects/:id/edit/:timelineId" element={<EditorPage />} />
         <Route path="/projects/:id" element={<ProjectLayout />}>
           <Route index element={<MediaLibraryPage />} />
           <Route path="settings" element={<ProjectSettingsPage />} />

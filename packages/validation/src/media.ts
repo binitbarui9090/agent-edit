@@ -125,6 +125,12 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     projectId: idSchema(ID_PREFIXES.project),
     mediaId: mediaIdSchema,
   }),
+  z.object({
+    type: z.literal('timeline.changed'),
+    projectId: idSchema(ID_PREFIXES.project),
+    timelineId: idSchema(ID_PREFIXES.timeline),
+    revision: z.number().int().nonnegative(),
+  }),
 ]);
 export type ServerEvent = z.infer<typeof serverEventSchema>;
 

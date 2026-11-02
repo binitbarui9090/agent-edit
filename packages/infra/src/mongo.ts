@@ -1,5 +1,12 @@
 import type { AspectRatio, FrameRate, ProcessingStep, UploadExtension } from '@agent-edit/shared';
-import type { JobStatus, MediaProbe, MediaStatus } from '@agent-edit/validation';
+import type {
+  JobStatus,
+  MediaProbe,
+  MediaStatus,
+  TimelineOperation,
+  TimelineTrack,
+  TransactionSource,
+} from '@agent-edit/validation';
 import { MongoClient, type Collection, type Db } from 'mongodb';
 
 export interface UserDoc {
@@ -78,6 +85,52 @@ export interface AnalysisJobDoc {
   updatedAt: Date;
 }
 
+export interface TimelineDoc {
+  _id: string;
+  projectId: string;
+  ownerId: string;
+  kind: 'main' | 'short';
+  name: string;
+  revision: number;
+  frameRate: FrameRate;
+  width: number;
+  height: number;
+  tracks: TimelineTrack[];
+  /** Transaction ids. Each entry's inverseOps is what undo (or redo) applies next. */
+  undoStack: string[];
+  redoStack: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+}
+
+export interface EditTransactionDoc {
+  _id: string;
+  timelineId: string;
+  projectId: string;
+  /** The revision this transaction produces. Unique per timeline, so it also acts as the lock. */
+  revision: number;
+  idempotencyKey: string;
+  source: TransactionSource;
+  summary: string;
+  author: { userId: string; agentRunId: string | null; model: string | null };
+  ops: TimelineOperation[];
+  inverseOps: TimelineOperation[];
+  createdAt: Date;
+}
+
+export interface TimelineVersionDoc {
+  _id: string;
+  timelineId: string;
+  projectId: string;
+  name: string;
+  revision: number;
+  trigger: 'manual' | 'pre_ai' | 'pre_restore';
+  tracks: TimelineTrack[];
+  createdBy: string;
+  createdAt: Date;
+}
+
 export interface Database {
   client: MongoClient;
   db: Db;
@@ -86,6 +139,9 @@ export interface Database {
   projects: Collection<ProjectDoc>;
   media: Collection<MediaDoc>;
   analysisJobs: Collection<AnalysisJobDoc>;
+  timelines: Collection<TimelineDoc>;
+  transactions: Collection<EditTransactionDoc>;
+  versions: Collection<TimelineVersionDoc>;
 }
 
 export async function connectMongo(url: string, dbName: string): Promise<Database> {
@@ -100,6 +156,9 @@ export async function connectMongo(url: string, dbName: string): Promise<Databas
     projects: db.collection('projects'),
     media: db.collection('media'),
     analysisJobs: db.collection('analysis_jobs'),
+    timelines: db.collection('timelines'),
+    transactions: db.collection('edit_transactions'),
+    versions: db.collection('timeline_versions'),
   };
   await ensureIndexes(database);
   return database;
@@ -111,6 +170,9 @@ async function ensureIndexes({
   projects,
   media,
   analysisJobs,
+  timelines,
+  transactions,
+  versions,
 }: Database): Promise<void> {
   await Promise.all([
     users.createIndex({ email: 1 }, { unique: true }),
@@ -128,5 +190,15 @@ async function ensureIndexes({
     ),
     analysisJobs.createIndex({ mediaId: 1, step: 1 }, { unique: true }),
     analysisJobs.createIndex({ status: 1, updatedAt: 1 }),
+    timelines.createIndex({ projectId: 1, deletedAt: 1, updatedAt: -1 }),
+    timelines.createIndex({ 'tracks.clips.sourceMediaId': 1 }),
+    // One main timeline per project, however many requests race to create it.
+    timelines.createIndex(
+      { projectId: 1 },
+      { unique: true, partialFilterExpression: { kind: 'main', deletedAt: null } },
+    ),
+    transactions.createIndex({ timelineId: 1, revision: 1 }, { unique: true }),
+    transactions.createIndex({ timelineId: 1, idempotencyKey: 1 }, { unique: true }),
+    versions.createIndex({ timelineId: 1, createdAt: -1 }),
   ]);
 }

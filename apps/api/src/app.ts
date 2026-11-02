@@ -15,6 +15,8 @@ import { MediaService } from './modules/media/service.js';
 import { projectRoutes } from './modules/projects/routes.js';
 import { ProjectService } from './modules/projects/service.js';
 import { realtimeRoutes } from './modules/realtime/routes.js';
+import { timelineRoutes } from './modules/timelines/routes.js';
+import { TimelineService } from './modules/timelines/service.js';
 import { authPlugin } from './plugins/auth.js';
 import { errorsPlugin } from './plugins/errors.js';
 
@@ -69,6 +71,8 @@ export async function buildApp({
     maxUploadBytes: config.MAX_UPLOAD_BYTES,
   });
 
+  const timelines = new TimelineService({ database, redis, projects });
+
   await app.register(authPlugin, { auth, webOrigin: config.WEB_ORIGIN });
   await app.register(healthRoutes, { prefix: '/health', database, redis, storage });
   await app.register(
@@ -76,6 +80,7 @@ export async function buildApp({
       await api.register(authRoutes, { prefix: '/auth', auth, config });
       await api.register(projectRoutes, { prefix: '/projects', projects });
       await api.register(mediaRoutes, { prefix: '/projects', media });
+      await api.register(timelineRoutes, { prefix: '/projects', timelines });
       await api.register(realtimeRoutes, { auth, projects, redis, webOrigin: config.WEB_ORIGIN });
     },
     { prefix: '/api/v1' },

@@ -50,6 +50,9 @@ function ProjectFrame({ project }: { project: Project }) {
         <NavLink end to={`/projects/${project.id}`} className={tabClass}>
           Media
         </NavLink>
+        <Link to={`/projects/${project.id}/edit`} className={styles.tab}>
+          Editor
+        </Link>
         <NavLink to={`/projects/${project.id}/settings`} className={tabClass}>
           Settings
         </NavLink>
@@ -101,6 +104,9 @@ export function ProjectSettingsPage() {
           }}
         />
         <SettingsFields value={settings} onChange={setSettings} />
+        <p className={styles.dangerText}>
+          These settings apply when a timeline is created. An existing timeline keeps its format.
+        </p>
         <div className={styles.actions}>
           <Button type="submit" variant="primary" disabled={!dirty || update.isPending}>
             {update.isPending ? 'Saving…' : 'Save changes'}

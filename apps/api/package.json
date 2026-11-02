@@ -10,6 +10,7 @@
   "dependencies": {
     "@agent-edit/infra": "*",
     "@agent-edit/shared": "*",
+    "@agent-edit/timeline-engine": "*",
     "@agent-edit/validation": "*",
     "@fastify/cookie": "^11.1.5",
     "@fastify/helmet": "^13.2.0",

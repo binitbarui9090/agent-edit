@@ -1,6 +1,6 @@
 import { serverEventSchema } from '@agent-edit/validation';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { patchJobProgress, refreshMedia } from './media';
 
 const MAX_BACKOFF_MS = 15_000;
@@ -11,9 +11,14 @@ const SILENCE_LIMIT_MS = 60_000;
 const FINAL_CLOSE_CODES = new Set([4401, 4404]);
 
 /** Returns whether the socket is live, so callers can fall back to polling and say so. */
-export function useProjectEvents(projectId: string): boolean {
+export function useProjectEvents(
+  projectId: string,
+  onTimelineChanged?: (revision: number) => void,
+): boolean {
   const client = useQueryClient();
   const [live, setLive] = useState(false);
+  const timelineListener = useRef(onTimelineChanged);
+  timelineListener.current = onTimelineChanged;
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -69,7 +74,9 @@ export function useProjectEvents(projectId: string): boolean {
         }
         const event = serverEventSchema.safeParse(message);
         if (!event.success) return;
-        if (event.data.type === 'job.progress') {
+        if (event.data.type === 'timeline.changed') {
+          timelineListener.current?.(event.data.revision);
+        } else if (event.data.type === 'job.progress') {
           const { mediaId, step, status, progress } = event.data;
           patchJobProgress(client, projectId, mediaId, { step, status, progress });
         } else {

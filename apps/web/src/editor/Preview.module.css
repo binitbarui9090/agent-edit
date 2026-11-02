@@ -1,0 +1,44 @@
+.preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-0);
+}
+
+.viewport {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 8px;
+  container-type: size;
+}
+
+/* Fits inside the viewport at any aspect ratio. Captions size against this via cqh units. */
+.stage {
+  position: relative;
+  max-width: 100cqw;
+  max-height: 100cqh;
+  width: 100cqw;
+  overflow: hidden;
+  background: #000;
+  container-type: size;
+}
+
+.transport {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 36px;
+  border-top: 1px solid var(--line);
+}
+
+.timecode {
+  margin-right: 12px;
+  font: 400 var(--text-md) / 1 var(--font-data);
+  color: var(--accent);
+}

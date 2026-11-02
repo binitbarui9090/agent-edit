@@ -367,6 +367,13 @@ export class MediaService {
   /** Soft delete: the sweep removes objects later, after any job still running has noticed. */
   async remove(ownerId: string, projectId: string, mediaId: string): Promise<void> {
     const doc = await this.findOwned(ownerId, projectId, mediaId);
+    const used = await this.database.timelines.countDocuments(
+      { projectId, deletedAt: null, 'tracks.clips.sourceMediaId': mediaId },
+      { limit: 1 },
+    );
+    if (used > 0) {
+      throw new AppError('in_use', 'This footage is used on a timeline. Remove its clips first.');
+    }
     await this.database.media.updateOne({ _id: mediaId }, { $set: { deletedAt: new Date() } });
     if (doc.upload) {
       await this.storage.abortMultipart(doc.storage.originalKey, doc.upload.s3UploadId);

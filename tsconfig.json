@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/shared" },
     { "path": "packages/validation" },
+    { "path": "packages/timeline-engine" },
     { "path": "packages/infra" },
     { "path": "packages/media-engine" },
     { "path": "apps/api" },
