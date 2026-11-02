@@ -1,8 +1,12 @@
 import type { AspectRatio, FrameRate, ProcessingStep, UploadExtension } from '@agent-edit/shared';
 import type {
+  AgentPlan,
+  AgentRunStatus,
+  CompiledPlanStep,
   JobStatus,
   MediaProbe,
   MediaStatus,
+  ShortProposal,
   TimelineOperation,
   TimelineTrack,
   TransactionSource,
@@ -80,8 +84,74 @@ export interface AnalysisJobDoc {
   attempts: number;
   error: string | null;
   provider: { id: string; isMock: boolean };
+  /** Why a step was skipped or what it left out, in words a user can act on. */
+  note: string | null;
   startedAt: Date | null;
   finishedAt: Date | null;
+  updatedAt: Date;
+}
+
+interface ProviderRef {
+  id: string;
+  model: string | null;
+  isMock: boolean;
+}
+
+export interface TranscriptSegmentDoc {
+  _id: string;
+  mediaId: string;
+  projectId: string;
+  start: number;
+  end: number;
+  text: string;
+  speaker: string | null;
+  words: Array<{ w: string; s: number; e: number }>;
+  provider: ProviderRef;
+}
+
+export interface SceneDoc {
+  _id: string;
+  mediaId: string;
+  projectId: string;
+  start: number;
+  end: number;
+  summary: string | null;
+  provider: ProviderRef | null;
+}
+
+export type MomentKind = 'silence' | 'repeated_take' | 'chapter' | 'highlight';
+
+export interface MomentDoc {
+  _id: string;
+  mediaId: string;
+  projectId: string;
+  kind: MomentKind;
+  start: number;
+  end: number;
+  score: number;
+  title: string | null;
+  reason: string | null;
+  provider: ProviderRef;
+}
+
+export interface AgentRunDoc {
+  _id: string;
+  projectId: string;
+  timelineId: string;
+  ownerId: string;
+  instruction: string;
+  status: AgentRunStatus;
+  stage: string | null;
+  baseRevision: number;
+  plan: AgentPlan | null;
+  steps: CompiledPlanStep[];
+  ops: TimelineOperation[];
+  shorts: ShortProposal[];
+  warnings: string[];
+  provider: ProviderRef | null;
+  error: string | null;
+  appliedTransactionId: string | null;
+  createdAt: Date;
   updatedAt: Date;
 }
 
@@ -142,6 +212,10 @@ export interface Database {
   timelines: Collection<TimelineDoc>;
   transactions: Collection<EditTransactionDoc>;
   versions: Collection<TimelineVersionDoc>;
+  segments: Collection<TranscriptSegmentDoc>;
+  scenes: Collection<SceneDoc>;
+  moments: Collection<MomentDoc>;
+  agentRuns: Collection<AgentRunDoc>;
 }
 
 export async function connectMongo(url: string, dbName: string): Promise<Database> {
@@ -159,6 +233,10 @@ export async function connectMongo(url: string, dbName: string): Promise<Databas
     timelines: db.collection('timelines'),
     transactions: db.collection('edit_transactions'),
     versions: db.collection('timeline_versions'),
+    segments: db.collection('transcript_segments'),
+    scenes: db.collection('scenes'),
+    moments: db.collection('moments'),
+    agentRuns: db.collection('agent_runs'),
   };
   await ensureIndexes(database);
   return database;
@@ -173,6 +251,10 @@ async function ensureIndexes({
   timelines,
   transactions,
   versions,
+  segments,
+  scenes,
+  moments,
+  agentRuns,
 }: Database): Promise<void> {
   await Promise.all([
     users.createIndex({ email: 1 }, { unique: true }),
@@ -200,5 +282,10 @@ async function ensureIndexes({
     transactions.createIndex({ timelineId: 1, revision: 1 }, { unique: true }),
     transactions.createIndex({ timelineId: 1, idempotencyKey: 1 }, { unique: true }),
     versions.createIndex({ timelineId: 1, createdAt: -1 }),
+    segments.createIndex({ mediaId: 1, start: 1 }),
+    segments.createIndex({ text: 'text' }),
+    scenes.createIndex({ mediaId: 1, start: 1 }),
+    moments.createIndex({ mediaId: 1, kind: 1, start: 1 }),
+    agentRuns.createIndex({ timelineId: 1, createdAt: -1 }),
   ]);
 }

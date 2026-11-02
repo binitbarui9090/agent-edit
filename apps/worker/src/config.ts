@@ -1,9 +1,10 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { aiEnvSchema } from '@agent-edit/ai-engine';
 import { storageEnvSchema } from '@agent-edit/infra';
 import { z } from 'zod';
 
-const envSchema = storageEnvSchema.extend({
+const envSchema = storageEnvSchema.extend(aiEnvSchema.shape).extend({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   REDIS_URL: z.string().min(1),
   MONGO_URL: z.string().min(1),
@@ -11,6 +12,7 @@ const envSchema = storageEnvSchema.extend({
   WORK_DIR: z.string().min(1).default(join(tmpdir(), 'agent-edit-work')),
   MEDIA_CONCURRENCY: z.coerce.number().int().positive().default(3),
   PROXY_CONCURRENCY: z.coerce.number().int().positive().default(1),
+  ANALYSIS_CONCURRENCY: z.coerce.number().int().positive().default(1),
   FFMPEG_PATH: z.string().min(1).default('ffmpeg'),
   FFPROBE_PATH: z.string().min(1).default('ffprobe'),
 });

@@ -145,6 +145,10 @@
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+.clip[data-proposed='true'] {
+  box-shadow: inset 0 0 0 2px #a897ff;
+}
+
 .clip[data-enabled='false'] {
   opacity: 0.4;
 }

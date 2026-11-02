@@ -191,6 +191,7 @@ Keeping them separate means a model can never produce an off-grid time, and the 
 | `update_caption`                                       | `{ clipId, text?, style? }`                           | Added: captions must be editable                                        |
 | `update_transform`                                     | `{ clipId, transform }`                               | Added: reframing and manual transform                                   |
 | `set_clip_enabled`                                     | `{ clipId, enabled }`                                 | Added: enable/disable                                                   |
+| `update_track`                                         | `{ trackId, locked?, muted?, volume? }`               | Added: track controls. The one operation allowed on a locked track.     |
 
 Ripple delete is not an operation. It compiles to `remove_clip` plus `move_clip`s, so every effect stays visible in the preview.
 
@@ -217,6 +218,8 @@ Ripple delete is not an operation. It compiles to `remove_clip` plus `move_clip`
 **Playback.** A `PlaybackEngine` lives outside React and owns a master clock, a small per-track pool of `<video>` elements (current and pre-rolled next clip), and WebAudio gain nodes. It uses `requestVideoFrameCallback` for drift correction. The playhead updates through refs, so playback does not re-render React. Only visible clips mount.
 
 **Known limitation, stated up front.** `<video>` seeks are not frame-guaranteed. Expect up to about ±1 frame at cut points and brief gaps on rapid multi-track cuts. Timeline _data_ and the final _render_ stay frame-accurate. WebCodecs is the upgrade path if preview precision becomes the bottleneck.
+
+**Measured on a 500-clip timeline** (`e2e/editor.mjs`): 6 clips mounted at once, scrolling at 16.9 ms per frame at the 95th percentile, and 178 ms from an edit to the server's confirmation.
 
 **Render compiler.** A pure function `Timeline → RenderGraph → ffmpeg args`, tested by snapshot and by probing real outputs. It uses per-clip `trim`/`setpts`/`scale`/`overlay`, `atrim`/`atempo`/`volume`/`loudnorm`/`afftdn`/`afade`/`amix`, and `ass`/`subtitles` for captions, passed through `-filter_complex_script` so long timelines do not hit argv limits.
 
@@ -246,14 +249,20 @@ Every capability sits behind a provider interface selected by environment variab
 
 Infrastructure: MongoDB, Redis (`noeviction`, which BullMQ requires) and S3-compatible storage all run in local containers at no cost. Production hosting is a later decision and no paid service is introduced without asking.
 
+### How the agent is built
+
+The model outputs a **plan**, never timeline edits. A deterministic compiler turns each step into exact operations using measured facts (silence ranges, repeated takes, word timings), and the reducer dry-runs every step. A small local model therefore produces a worse plan, not a corrupted timeline, and a step that cannot apply is reported on its own while the rest still work. Only the creator's approval in the API can commit anything, and it recompiles against the current timeline so newer edits are never overwritten.
+
+**Tested end to end on this Mac:** whisper.cpp `base.en` and Ollama `qwen3:8b`. The Claude and Deepgram adapters are tested against local stand-ins only, because no paid key was used. Speaker identification requires Deepgram: whisper.cpp does not provide it and the step says so.
+
 ## 8. Phased development plan
 
 | Phase                | Scope                                                                                                                 | Acceptance                                                            |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | **1. Foundation** ✅ | Monorepo, web/api/worker, Mongo, Redis, shared contracts, auth, project CRUD                                          | Tests pass against real services; browser walk-through works          |
 | **2. Media** ✅      | Storage, resumable multipart upload, FFprobe, thumbnails, waveform, proxy, job DAG, WebSocket progress, media library | Interrupt and resume a multi-GB upload; proxy plays                   |
-| **3. Timeline**      | `timeline-engine`, op log, multi-track editor, playback, undo/redo, versions                                          | Every gesture changes persisted state; 500-clip timeline stays smooth |
-| **4. AI**            | Adapters, transcription, scenes, speakers, moments, planner, proposal flow                                            | Plan → preview → apply → undo with attribution                        |
+| **3. Timeline** ✅   | `timeline-engine`, op log, multi-track editor, playback, undo/redo, versions                                          | Every gesture changes persisted state; 500-clip timeline stays smooth |
+| **4. AI** ✅         | Adapters, transcription, scenes, speakers, moments, planner, proposal flow                                            | Plan → preview → apply → undo with attribution                        |
 | **5. Render**        | Compiler, multi-track output, audio, captions, export jobs, signed download                                           | Output duration and streams match the timeline when probed            |
 | **6. Advanced**      | B-roll, Shorts as independent timelines, reframing, advanced audio                                                    | Demo steps 7–11 end to end                                            |
 | **7. Hardening**     | Profiling, integration tests, security review, render validation                                                      | The full 15-step demo is the acceptance test                          |

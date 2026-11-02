@@ -53,6 +53,9 @@ function ProjectFrame({ project }: { project: Project }) {
         <Link to={`/projects/${project.id}/edit`} className={styles.tab}>
           Editor
         </Link>
+        <NavLink to={`/projects/${project.id}/analysis`} className={tabClass}>
+          Analysis
+        </NavLink>
         <NavLink to={`/projects/${project.id}/settings`} className={tabClass}>
           Settings
         </NavLink>

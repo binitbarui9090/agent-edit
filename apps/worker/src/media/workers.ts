@@ -1,6 +1,7 @@
-import { type MediaJobData } from '@agent-edit/infra';
+import { type AgentJobData, type MediaJobData } from '@agent-edit/infra';
 import { MAINTENANCE_JOBS, QUEUES } from '@agent-edit/shared';
 import { Queue, Worker, type ConnectionOptions } from 'bullmq';
+import { processAgentRun } from '../agent/run.js';
 import { handleStepFailure, processStep, type PipelineContext } from './pipeline.js';
 import { sweep } from './sweep.js';
 
@@ -9,6 +10,7 @@ export interface WorkerOptions {
   prefix?: string;
   mediaConcurrency: number;
   proxyConcurrency: number;
+  analysisConcurrency: number;
   workDir: string;
 }
 
@@ -16,7 +18,14 @@ const SWEEP_EVERY_MS = 10 * 60 * 1000;
 
 export async function startMediaWorkers(
   ctx: PipelineContext,
-  { connection, prefix, mediaConcurrency, proxyConcurrency, workDir }: WorkerOptions,
+  {
+    connection,
+    prefix,
+    mediaConcurrency,
+    proxyConcurrency,
+    analysisConcurrency,
+    workDir,
+  }: WorkerOptions,
 ) {
   const base = { connection, ...(prefix ? { prefix } : {}) };
 
@@ -36,6 +45,22 @@ export async function startMediaWorkers(
   };
   const media = build(QUEUES.media, mediaConcurrency);
   const proxy = build(QUEUES.proxy, proxyConcurrency);
+  const analysis = build(QUEUES.analysis, analysisConcurrency);
+
+  const agent = new Worker<AgentJobData>(
+    QUEUES.agent,
+    (job) => processAgentRun(ctx, job.data.runId),
+    {
+      ...base,
+      // Long by design: a local model can take minutes per plan, and a lost lock would run it twice.
+      lockDuration: 10 * 60 * 1000,
+      concurrency: 2,
+    },
+  );
+  agent.on('error', (err) => ctx.log.error({ err }, 'agent worker error'));
+  agent.on('failed', (job, err) =>
+    ctx.log.error({ err, runId: job?.data.runId }, 'agent run failed'),
+  );
 
   const maintenanceQueue = new Queue(QUEUES.maintenance, base);
   const maintenance = new Worker(
@@ -59,7 +84,13 @@ export async function startMediaWorkers(
     media,
     proxy,
     async close() {
-      await Promise.all([media.close(), proxy.close(), maintenance.close()]);
+      await Promise.all([
+        media.close(),
+        proxy.close(),
+        analysis.close(),
+        agent.close(),
+        maintenance.close(),
+      ]);
       await maintenanceQueue.close();
     },
   };

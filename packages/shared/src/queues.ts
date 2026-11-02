@@ -3,6 +3,10 @@ export const QUEUES = {
   // Separate queues so a multi-hour proxy encode cannot hold up quick steps for other footage.
   media: 'media',
   proxy: 'media-proxy',
+  // One at a time by default: speech recognition uses every core it can get.
+  analysis: 'analysis',
+  agent: 'agent',
+  render: 'render',
   maintenance: 'maintenance',
 } as const;
 

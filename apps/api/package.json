@@ -8,6 +8,7 @@
     "start": "node --env-file-if-exists=../../.env dist/index.js"
   },
   "dependencies": {
+    "@agent-edit/ai-engine": "*",
     "@agent-edit/infra": "*",
     "@agent-edit/shared": "*",
     "@agent-edit/timeline-engine": "*",

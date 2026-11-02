@@ -8,9 +8,11 @@
     "start": "node --env-file-if-exists=../../.env dist/index.js"
   },
   "dependencies": {
+    "@agent-edit/ai-engine": "*",
     "@agent-edit/infra": "*",
     "@agent-edit/media-engine": "*",
     "@agent-edit/shared": "*",
+    "@agent-edit/timeline-engine": "*",
     "@agent-edit/validation": "*",
     "bullmq": "^6.5.4",
     "ioredis": "^6.0.0",

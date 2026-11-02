@@ -33,7 +33,16 @@ export function partCountFor(fileSize: number, partSize: number): number {
   return Math.max(1, Math.ceil(fileSize / partSize));
 }
 
-export const PROCESSING_STEPS = ['probe', 'thumbnails', 'waveform', 'proxy', 'audio'] as const;
+export const MEDIA_STEPS = ['probe', 'thumbnails', 'waveform', 'proxy', 'audio'] as const;
+export const ANALYSIS_STEPS = [
+  'transcript',
+  'silence',
+  'scenes',
+  'speakers',
+  'visual',
+  'moments',
+] as const;
+export const PROCESSING_STEPS = [...MEDIA_STEPS, ...ANALYSIS_STEPS] as const;
 export type ProcessingStep = (typeof PROCESSING_STEPS)[number];
 
 export const STEP_LABELS: Record<ProcessingStep, string> = {
@@ -42,9 +51,35 @@ export const STEP_LABELS: Record<ProcessingStep, string> = {
   waveform: 'Waveform',
   proxy: 'Proxy',
   audio: 'Audio',
+  transcript: 'Transcript',
+  silence: 'Silence',
+  scenes: 'Scenes',
+  speakers: 'Speakers',
+  visual: 'Visuals',
+  moments: 'Moments',
 };
 
 /** Without these the footage cannot be edited, so their failure fails the asset. */
 export const REQUIRED_STEPS: readonly ProcessingStep[] = ['probe', 'proxy'];
+
+/** A step runs once these have finished, however they finished. It decides for itself if it can. */
+export const STEP_DEPENDENCIES: Record<ProcessingStep, readonly ProcessingStep[]> = {
+  probe: [],
+  thumbnails: ['probe'],
+  waveform: ['probe'],
+  proxy: ['probe'],
+  audio: ['probe'],
+  transcript: ['audio'],
+  silence: ['audio'],
+  scenes: ['proxy'],
+  speakers: ['transcript'],
+  visual: ['scenes'],
+  moments: ['transcript', 'scenes'],
+};
+
+export function queueForStep(step: ProcessingStep): 'media' | 'proxy' | 'analysis' {
+  if (step === 'proxy') return 'proxy';
+  return (MEDIA_STEPS as readonly string[]).includes(step) ? 'media' : 'analysis';
+}
 
 export const WAVEFORM_PEAKS_PER_SECOND = 50;

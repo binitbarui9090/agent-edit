@@ -29,6 +29,9 @@ interface EditorState {
   /** The server is unreachable and edits are waiting to be sent. */
   offline: boolean;
   error: string | null;
+  /** An agent proposal shown on the timeline without being applied. */
+  previewRunId: string | null;
+  previewClipIds: ReadonlySet<string>;
 }
 
 export const useEditor = create<EditorState>(() => ({
@@ -38,6 +41,8 @@ export const useEditor = create<EditorState>(() => ({
   saving: false,
   offline: false,
   error: null,
+  previewRunId: null,
+  previewClipIds: new Set(),
 }));
 
 let confirmed: Timeline | null = null;
@@ -62,7 +67,10 @@ function recompute(): void {
     }
   }
   pending = kept;
+  // Any real change underneath makes a proposal's preview out of date.
   useEditor.setState((state) => ({
+    previewRunId: null,
+    previewClipIds: new Set<string>(),
     timeline: view,
     selection: state.selection.filter((id) => findClip(view, id)),
     saving: pending.length > 0,
@@ -124,8 +132,12 @@ export function setMediaLookup(lookup: MediaLookup | undefined): void {
  * invalid and nothing changed, so callers can leave the UI where it was.
  */
 export function commitEdit(ops: TimelineOperation[], summary: string): boolean {
-  const view = useEditor.getState().timeline;
+  const { timeline: view, previewRunId } = useEditor.getState();
   if (!view || ops.length === 0) return false;
+  if (previewRunId) {
+    useEditor.setState({ error: 'Stop the preview before editing. Nothing in it is applied yet.' });
+    return false;
+  }
   try {
     const { state } = applyOperations(view, ops, mediaLookup);
     pending.push({ ops, summary, idempotencyKey: crypto.randomUUID() });
@@ -152,6 +164,7 @@ export async function flushEdits(): Promise<Timeline | null> {
 }
 
 async function step(action: typeof undoTimeline): Promise<void> {
+  clearPreview();
   const current = await flushEdits();
   if (!current) return;
   try {
@@ -178,6 +191,33 @@ export async function syncFromServer(revision?: number): Promise<void> {
   if (pending.length > 0) return; // The drain loop reconciles when it next talks to the server.
   confirmed = await getTimeline(confirmed.projectId, confirmed.id);
   recompute();
+}
+
+/** Shows a proposal on the timeline and in playback. Nothing is stored or sent. */
+export function showPreview(
+  runId: string,
+  ops: TimelineOperation[],
+  clipIds: readonly string[],
+): void {
+  recompute();
+  const view = useEditor.getState().timeline;
+  if (!view) return;
+  try {
+    const { state } = applyOperations(view, ops);
+    useEditor.setState({
+      timeline: { ...view, ...state },
+      previewRunId: runId,
+      previewClipIds: new Set(clipIds),
+      selection: [],
+    });
+  } catch (err) {
+    if (!(err instanceof TimelineError)) throw err;
+    useEditor.setState({ error: `This plan no longer fits the timeline: ${err.message}` });
+  }
+}
+
+export function clearPreview(): void {
+  if (useEditor.getState().previewRunId) recompute();
 }
 
 export function adoptTimeline(timeline: Timeline): void {

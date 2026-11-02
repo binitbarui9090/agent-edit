@@ -12,16 +12,18 @@ import {
   type MediaPlayback,
   type TimelineOperation,
 } from '@agent-edit/validation';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
+import { agentRunsKey } from '../api/agent';
 import { request } from '../api/client';
 import { useProjectEvents } from '../api/events';
 import { useMedia } from '../api/media';
 import { useProject } from '../api/projects';
-import { getMainTimeline, getTimeline } from '../api/timelines';
+import { getMainTimeline, getTimeline, listTimelines } from '../api/timelines';
 import { Button } from '../components/Button';
 import { FormError } from '../components/Field';
+import { AgentPanel } from '../editor/AgentPanel';
 import { EditorContext } from '../editor/EditorContext';
 import { HistoryPanel } from '../editor/HistoryPanel';
 import { Inspector } from '../editor/Inspector';
@@ -32,6 +34,7 @@ import {
   MAX_PX_PER_SECOND,
   MIN_PX_PER_SECOND,
   clearEditorError,
+  clearPreview,
   commitEdit,
   loadTimeline,
   redo,
@@ -89,7 +92,13 @@ export function EditorPage() {
     gcTime: 0,
   });
 
-  const live = useProjectEvents(projectId, (revision) => void syncFromServer(revision));
+  const client = useQueryClient();
+  const live = useProjectEvents(projectId, {
+    onTimelineChanged: (revision) => void syncFromServer(revision),
+    onAgentChanged: (changedTimelineId) => {
+      void client.invalidateQueries({ queryKey: agentRunsKey(changedTimelineId) });
+    },
+  });
   const mediaQuery = useMedia(projectId, live);
   const assets: MediaAsset[] = useMemo(
     () => mediaQuery.data?.pages.flatMap((page) => page.items) ?? [],
@@ -116,7 +125,13 @@ export function EditorPage() {
   const offline = useEditor((state) => state.offline);
   const editorError = useEditor((state) => state.error);
   const pxPerSecond = useEditor((state) => state.pxPerSecond);
-  const [panel, setPanel] = useState<'inspector' | 'history'>('inspector');
+  const previewing = useEditor((state) => state.previewRunId !== null);
+  const [panel, setPanel] = useState<'inspector' | 'agent' | 'history'>('inspector');
+  const navigate = useNavigate();
+  const timelines = useQuery({
+    queryKey: ['timelines', projectId],
+    queryFn: () => listTimelines(projectId),
+  });
 
   const usedMediaIds = useMemo(() => {
     const ids = new Set<string>();
@@ -272,7 +287,24 @@ export function EditorPage() {
           <nav className={styles.crumbs} aria-label="Breadcrumb">
             <Link to={`/projects/${projectId}`}>{project.data?.name ?? 'Project'}</Link>
             <span aria-hidden="true">/</span>
-            <span>{timeline?.name}</span>
+            {(timelines.data?.items.length ?? 0) > 1 ? (
+              <select
+                className={styles.switcher}
+                aria-label="Timeline"
+                value={timeline?.id ?? ''}
+                onChange={(event) =>
+                  void navigate(`/projects/${projectId}/edit/${event.target.value}`)
+                }
+              >
+                {timelines.data?.items.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span>{timeline?.name}</span>
+            )}
           </nav>
           <div className={styles.tools}>
             <Button
@@ -317,6 +349,15 @@ export function EditorPage() {
           </span>
         </header>
 
+        {previewing && (
+          <div className={styles.preview} role="status">
+            Previewing the agent's proposal. Nothing has been applied.
+            <Button variant="ghost" onClick={clearPreview}>
+              Stop preview
+            </Button>
+          </div>
+        )}
+
         {editorError && (
           <div className={styles.error}>
             <FormError message={editorError} />
@@ -334,6 +375,7 @@ export function EditorPage() {
               {(
                 [
                   ['inspector', 'Inspector'],
+                  ['agent', 'Agent'],
                   ['history', 'History'],
                 ] as const
               ).map(([value, label]) => (
@@ -352,6 +394,9 @@ export function EditorPage() {
             </div>
             <div className={styles.panel}>
               {panel === 'inspector' && <Inspector />}
+              {panel === 'agent' && timeline && (
+                <AgentPanel projectId={projectId} timelineId={timeline.id} />
+              )}
               {panel === 'history' && timeline && (
                 <HistoryPanel projectId={projectId} timelineId={timeline.id} />
               )}

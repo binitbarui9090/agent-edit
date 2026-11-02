@@ -76,6 +76,26 @@
   white-space: nowrap;
 }
 
+.switcher {
+  max-width: 240px;
+  height: 24px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+}
+
+.preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  background: #2a2548;
+  color: #cfc7ff;
+  font-size: var(--text-sm);
+}
+
 .error {
   display: flex;
   align-items: center;

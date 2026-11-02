@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes } from 'react-router';
 import { useMe } from './api/auth';
 import { AppShell } from './components/AppShell';
 import { AuthPage } from './pages/AuthPage';
+import { AnalysisPage } from './pages/AnalysisPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EditorPage } from './pages/EditorPage';
 import { NewProjectPage } from './pages/NewProjectPage';
@@ -42,6 +43,7 @@ export function App() {
         <Route path="/projects/:id/edit/:timelineId" element={<EditorPage />} />
         <Route path="/projects/:id" element={<ProjectLayout />}>
           <Route index element={<MediaLibraryPage />} />
+          <Route path="analysis" element={<AnalysisPage />} />
           <Route path="settings" element={<ProjectSettingsPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />

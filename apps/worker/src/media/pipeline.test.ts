@@ -13,6 +13,7 @@ import {
 } from '@agent-edit/infra';
 import { ProcessTracker, probeFile } from '@agent-edit/media-engine';
 import {
+  MEDIA_STEPS,
   PROCESSING_STEPS,
   QUEUES,
   WAVEFORM_PEAKS_PER_SECOND,
@@ -116,6 +117,7 @@ async function settled(mediaId: string): Promise<MediaDoc> {
 }
 
 const jobsOf = (mediaId: string) => database.analysisJobs.find({ mediaId }).toArray();
+const isMediaStep = (step: string) => (MEDIA_STEPS as readonly string[]).includes(step);
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'ae-pipeline-'));
@@ -139,6 +141,7 @@ beforeAll(async () => {
     cache: new SourceCache(storage, workDir),
     binaries: { ffmpeg: 'ffmpeg', ffprobe: 'ffprobe' },
     tracker: new ProcessTracker(join(workDir, 'processes')),
+    ai: { speech: null, language: null, vision: null },
     log: pino({ level: 'silent' }),
     signal: new AbortController().signal,
   };
@@ -147,6 +150,7 @@ beforeAll(async () => {
     prefix,
     mediaConcurrency: 3,
     proxyConcurrency: 1,
+    analysisConcurrency: 1,
     workDir,
   });
 });
@@ -154,7 +158,13 @@ beforeAll(async () => {
 afterAll(async () => {
   await workers.close();
   await queues.close();
-  for (const queue of [QUEUES.media, QUEUES.proxy, QUEUES.maintenance]) {
+  for (const queue of [
+    QUEUES.media,
+    QUEUES.proxy,
+    QUEUES.analysis,
+    QUEUES.agent,
+    QUEUES.maintenance,
+  ]) {
     const handle = new Queue(queue, { connection: redis, prefix });
     await handle.obliterate({ force: true });
     await handle.close();
@@ -178,7 +188,7 @@ describe('media pipeline', () => {
 
     expect(done.error).toBeNull();
     expect(done.status).toBe('ready');
-    for (const job of await jobsOf(doc._id)) {
+    for (const job of (await jobsOf(doc._id)).filter((j) => isMediaStep(j.step))) {
       expect(job).toMatchObject({ status: 'done', progress: 1, error: null, attempts: 1 });
       expect(job.provider).toEqual({ id: 'ffmpeg', isMock: false });
     }
@@ -214,6 +224,7 @@ describe('media pipeline', () => {
     const jobs = await jobsOf(doc._id);
     const status = (step: string) => jobs.find((j) => j.step === step)?.status;
     expect(status('waveform')).toBe('skipped');
+    expect(jobs.find((j) => j.step === 'waveform')?.note).toContain('no audio');
     expect(status('audio')).toBe('skipped');
     expect(status('proxy')).toBe('done');
     expect(done.storage.waveformKey).toBeNull();
@@ -230,6 +241,7 @@ describe('media pipeline', () => {
     const probe = jobs.find((j) => j.step === 'probe');
     expect(probe).toMatchObject({ status: 'failed', attempts: 1 });
     for (const job of jobs.filter((j) => j.step !== 'probe')) expect(job.status).toBe('skipped');
+    expect(jobs.find((j) => j.step === 'proxy')?.note).toContain('Metadata');
   });
 
   it('refuses a disguised ffconcat script end to end', async () => {

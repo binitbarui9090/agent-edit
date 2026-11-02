@@ -4,6 +4,7 @@ import {
   type MediaDoc,
   type MediaQueues,
   type Storage,
+  enqueueReadySteps,
   newJobDoc,
   originalKey,
   publishEvent,
@@ -18,6 +19,7 @@ import {
 } from '@agent-edit/shared';
 import type {
   InitUploadRequest,
+  MediaAnalysis,
   MediaAsset,
   MediaList,
   MediaPlayback,
@@ -77,7 +79,14 @@ export class MediaService {
       probe: doc.probe,
       jobs: [...jobs]
         .sort((a, b) => order(a) - order(b))
-        .map(({ step, status, progress, error }) => ({ step, status, progress, error })),
+        .map(({ step, status, progress, error, provider, note }) => ({
+          step,
+          status,
+          progress,
+          error,
+          provider,
+          note,
+        })),
       posterUrl: doc.storage.posterKey ? await this.storage.signRead(doc.storage.posterKey) : null,
       createdAt: doc.createdAt.toISOString(),
       updatedAt: doc.updatedAt.toISOString(),
@@ -364,6 +373,35 @@ export class MediaService {
     return this.assetFor(doc);
   }
 
+  async analysis(ownerId: string, projectId: string, mediaId: string): Promise<MediaAnalysis> {
+    await this.findOwned(ownerId, projectId, mediaId);
+    const [segments, scenes, moments] = await Promise.all([
+      this.database.segments.find({ mediaId }).sort({ start: 1 }).toArray(),
+      this.database.scenes.find({ mediaId }).sort({ start: 1 }).toArray(),
+      this.database.moments.find({ mediaId }).sort({ start: 1 }).toArray(),
+    ]);
+    return {
+      mediaId,
+      segments: segments.map(({ start, end, text, speaker }) => ({ start, end, text, speaker })),
+      segmentProvider: segments[0]?.provider ?? null,
+      scenes: scenes.map(({ start, end, summary, provider }) => ({
+        start,
+        end,
+        summary,
+        provider,
+      })),
+      moments: moments.map(({ kind, start, end, score, title, reason, provider }) => ({
+        kind,
+        start,
+        end,
+        score,
+        title,
+        reason,
+        provider,
+      })),
+    };
+  }
+
   /** Soft delete: the sweep removes objects later, after any job still running has noticed. */
   async remove(ownerId: string, projectId: string, mediaId: string): Promise<void> {
     const doc = await this.findOwned(ownerId, projectId, mediaId);
@@ -412,10 +450,7 @@ export class MediaService {
       { $set: { status: 'processing', error: null, generation, updatedAt: now } },
       { returnDocument: 'after' },
     );
-    const data = { mediaId, projectId };
-    for (const step of probeFailed ? (['probe'] as const) : resetSteps) {
-      await this.queues.enqueue(step, data, generation);
-    }
+    await enqueueReadySteps(this.database, this.queues, mediaId, projectId, generation);
     await publishEvent(this.redis, { type: 'media.changed', projectId, mediaId });
     return this.assetFor(updated ?? doc);
   }

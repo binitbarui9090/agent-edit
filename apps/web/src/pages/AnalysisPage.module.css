@@ -1,0 +1,124 @@
+.page {
+  padding-top: 14px;
+  max-width: 900px;
+}
+
+.select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.select select {
+  height: 28px;
+  max-width: 100%;
+  padding: 0 6px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+
+.detail {
+  margin-top: 12px;
+}
+
+.jobs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.job {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 8px;
+  padding: 6px 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+}
+
+.jobName {
+  font-size: var(--text-sm);
+}
+
+.jobStatus {
+  color: var(--text-2);
+  font: 400 var(--text-xs) / 1.7 var(--font-data);
+}
+
+.job[data-status='done'] .jobStatus {
+  color: var(--success);
+}
+
+.job[data-status='running'] .jobStatus {
+  color: var(--accent);
+}
+
+.job[data-status='failed'] .jobStatus {
+  color: var(--danger);
+}
+
+.section {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: var(--text-md);
+  font-weight: 500;
+}
+
+.count {
+  color: var(--text-3);
+  font: 400 var(--text-sm) / 1 var(--font-data);
+}
+
+.provider {
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+.mock {
+  padding: 0 5px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  padding: 3px 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.time {
+  color: var(--text-3);
+  font: 400 var(--text-xs) / 1.8 var(--font-data);
+}
+
+.reason {
+  display: block;
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.speaker {
+  margin-right: 6px;
+  color: var(--accent);
+  font-size: var(--text-xs);
+}

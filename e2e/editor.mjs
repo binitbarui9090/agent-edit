@@ -400,6 +400,14 @@ ok(
   'delete removes the whole selection',
   timeline.tracks.every((t) => t.clips.length === 0),
 );
+const playheadAtZero = await page
+  .getByTestId('playhead')
+  .evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41);
+ok(
+  'playhead follows the clock when the timeline empties',
+  playheadAtZero === 0 && (await page.getByTestId('timecode').textContent()) === '00:00:00:00',
+  `x=${playheadAtZero}`,
+);
 
 // --- Undo and redo ---
 const removedRevision = timeline.revision;

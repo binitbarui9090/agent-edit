@@ -188,6 +188,7 @@ interface ClipViewProps {
   label: string;
   pxPerSecond: number;
   selected: boolean;
+  proposed: boolean;
   deltaTicks: number;
   invalid: boolean;
   /** Whole chunks, so scrolling only redraws a waveform when it crosses a boundary. */
@@ -206,6 +207,7 @@ const ClipView = memo(function ClipView({
   label,
   pxPerSecond,
   selected,
+  proposed,
   deltaTicks,
   invalid,
   viewFromPx,
@@ -223,6 +225,7 @@ const ClipView = memo(function ClipView({
       className={styles.clip}
       data-track-type={track.type}
       data-selected={selected}
+      data-proposed={proposed}
       data-enabled={clip.enabled}
       data-invalid={invalid}
       data-clip-id={clip.id}
@@ -304,6 +307,7 @@ export function TimelineView() {
   const timeline = useEditor((state) => state.timeline);
   const selection = useEditor((state) => state.selection);
   const pxPerSecond = useEditor((state) => state.pxPerSecond);
+  const proposedClips = useEditor((state) => state.previewClipIds);
   const scroller = useRef<HTMLDivElement>(null);
   const headers = useRef<HTMLDivElement>(null);
   const playhead = useRef<HTMLDivElement>(null);
@@ -643,6 +647,7 @@ export function TimelineView() {
                       label={clipLabel(clip, media)}
                       pxPerSecond={pxPerSecond}
                       selected={selected.has(clip.id)}
+                      proposed={proposedClips.has(clip.id)}
                       deltaTicks={inMove ? gesture.deltaTicks : 0}
                       invalid={inMove ? !gesture.valid : false}
                       viewFromPx={chunkFrom}
@@ -658,6 +663,7 @@ export function TimelineView() {
                     label={clipLabel(moveInto.clip, media)}
                     pxPerSecond={pxPerSecond}
                     selected
+                    proposed={false}
                     deltaTicks={gesture.deltaTicks}
                     invalid={!gesture.valid}
                     viewFromPx={chunkFrom}

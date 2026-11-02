@@ -15,6 +15,9 @@ export const ID_PREFIXES = {
   agentRun: 'run',
   renderJob: 'rnd',
   analysisJob: 'anl',
+  segment: 'seg',
+  scene: 'scn',
+  moment: 'mom',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES];

@@ -39,6 +39,8 @@ export interface RunOptions {
   stallTimeoutMs?: number | undefined;
   onProgress?: ((seconds: number) => void) | undefined;
   tracker?: ProcessTracker | undefined;
+  /** Raises the log level and passes each stderr line along, for filters that report that way. */
+  onLogLine?: ((line: string) => void) | undefined;
 }
 
 const STDERR_TAIL_BYTES = 8 * 1024;
@@ -48,13 +50,22 @@ const DEFAULT_STALL_MS = 5 * 60 * 1000;
 export function runFfmpeg(
   binary: string,
   args: readonly string[],
-  { signal, stallTimeoutMs = DEFAULT_STALL_MS, onProgress, tracker }: RunOptions = {},
+  { signal, stallTimeoutMs = DEFAULT_STALL_MS, onProgress, tracker, onLogLine }: RunOptions = {},
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted();
     const child = spawn(
       binary,
-      ['-nostdin', '-hide_banner', '-loglevel', 'error', '-progress', 'pipe:1', '-y', ...args],
+      [
+        '-nostdin',
+        '-hide_banner',
+        '-loglevel',
+        onLogLine ? 'info' : 'error',
+        '-progress',
+        'pipe:1',
+        '-y',
+        ...args,
+      ],
       { stdio: ['ignore', 'pipe', 'pipe'], shell: false },
     );
     tracker?.track(child, binary);
@@ -91,8 +102,14 @@ export function runFfmpeg(
       }
     });
     child.stderr.setEncoding('utf8');
+    let partialLine = '';
     child.stderr.on('data', (chunk: string) => {
       stderr = (stderr + chunk).slice(-STDERR_TAIL_BYTES);
+      if (!onLogLine) return;
+      armStallTimer();
+      const lines = (partialLine + chunk).split('\n');
+      partialLine = lines.pop() ?? '';
+      for (const line of lines) onLogLine(line);
     });
 
     child.on('error', (err) => {

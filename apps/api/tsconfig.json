@@ -18,6 +18,9 @@
     },
     {
       "path": "../../packages/timeline-engine"
+    },
+    {
+      "path": "../../packages/ai-engine"
     }
   ]
 }

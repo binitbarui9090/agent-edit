@@ -7,6 +7,7 @@ import {
   type MediaQueues,
   type Storage,
   derivedKey,
+  enqueueReadySteps,
   publishEvent,
 } from '@agent-edit/infra';
 import {
@@ -19,7 +20,10 @@ import {
   type BinaryPaths,
   type ProcessTracker,
 } from '@agent-edit/media-engine';
+import type { AiProviders } from '@agent-edit/ai-engine';
 import {
+  MEDIA_STEPS,
+  PROCESSING_STEPS,
   REQUIRED_STEPS,
   STEP_LABELS,
   WAVEFORM_PEAKS_PER_SECOND,
@@ -30,6 +34,15 @@ import type { JobStatus } from '@agent-edit/validation';
 import { UnrecoverableError, type Job } from 'bullmq';
 import type { Redis } from 'ioredis';
 import type { Logger } from 'pino';
+import {
+  SkipStep,
+  runMoments,
+  runScenes,
+  runSilence,
+  runSpeakers,
+  runTranscript,
+  runVisual,
+} from './analysis.js';
 import type { SourceCache } from './source-cache.js';
 
 export interface PipelineContext {
@@ -40,12 +53,14 @@ export interface PipelineContext {
   cache: SourceCache;
   binaries: BinaryPaths;
   tracker: ProcessTracker;
+  ai: AiProviders;
   log: Logger;
   signal: AbortSignal;
 }
 
 const PROGRESS_INTERVAL_MS = 1000;
 const TERMINAL: ReadonlySet<JobStatus> = new Set(['done', 'failed', 'skipped']);
+const IS_MEDIA_STEP: ReadonlySet<ProcessingStep> = new Set(MEDIA_STEPS);
 
 /** Throttled, because FFmpeg reports many times a second and each report writes to MongoDB. */
 function progressReporter(ctx: PipelineContext, media: MediaDoc, step: ProcessingStep) {
@@ -60,7 +75,7 @@ function progressReporter(ctx: PipelineContext, media: MediaDoc, step: Processin
   };
 }
 
-async function writeProgress(
+export async function writeProgress(
   ctx: PipelineContext,
   media: MediaDoc,
   step: ProcessingStep,
@@ -80,11 +95,11 @@ async function writeProgress(
   });
 }
 
-async function setJobs(
+export async function setJobs(
   ctx: PipelineContext,
   mediaId: string,
   steps: readonly ProcessingStep[],
-  fields: { status: JobStatus; progress?: number; error?: string | null },
+  fields: { status: JobStatus; progress?: number; error?: string | null; note?: string },
 ) {
   const now = new Date();
   await ctx.database.analysisJobs.updateMany(
@@ -104,6 +119,8 @@ type StepRunner = (
   media: MediaDoc,
   report: (progress: number) => void,
 ) => Promise<void>;
+
+export type { StepRunner };
 
 function requireProbe(media: MediaDoc) {
   if (!media.probe) throw new Error('Step ran before metadata was available');
@@ -125,12 +142,13 @@ const runProbe: StepRunner = async (ctx, media) => {
     { $set: { probe, updatedAt: new Date() } },
   );
 
-  const next: ProcessingStep[] = ['thumbnails', 'proxy'];
-  if (probe.audioCodec) next.push('waveform', 'audio');
-  else await setJobs(ctx, media._id, ['waveform', 'audio'], { status: 'skipped', progress: 0 });
-
-  const data: MediaJobData = { mediaId: media._id, projectId: media.projectId };
-  for (const step of next) await ctx.queues.enqueue(step, data, media.generation);
+  if (!probe.audioCodec) {
+    await setJobs(ctx, media._id, ['waveform', 'audio'], {
+      status: 'skipped',
+      progress: 0,
+      note: 'This footage has no audio',
+    });
+  }
 };
 
 const runThumbnails: StepRunner = async (ctx, media, report) => {
@@ -249,12 +267,21 @@ const RUNNERS: Record<ProcessingStep, StepRunner> = {
   waveform: runWaveform,
   proxy: runProxy,
   audio: runAudio,
+  transcript: runTranscript,
+  silence: runSilence,
+  scenes: runScenes,
+  speakers: runSpeakers,
+  visual: runVisual,
+  moments: runMoments,
 };
 
 /** Decides the asset's status from its jobs, once none of them are still pending. */
 export async function settleMedia(ctx: PipelineContext, mediaId: string): Promise<void> {
   const jobs = await ctx.database.analysisJobs.find({ mediaId }).toArray();
-  if (jobs.some((job) => !TERMINAL.has(job.status))) return;
+  // The asset is usable once media steps finish. Analysis carries on behind it, keeping its source.
+  if (jobs.filter((job) => IS_MEDIA_STEP.has(job.step)).some((job) => !TERMINAL.has(job.status))) {
+    return;
+  }
 
   const fatal = jobs.find((job) => job.status === 'failed' && REQUIRED_STEPS.includes(job.step));
   const update = fatal
@@ -264,7 +291,18 @@ export async function settleMedia(ctx: PipelineContext, mediaId: string): Promis
     { _id: mediaId, deletedAt: null },
     { $set: { ...update, updatedAt: new Date() } },
   );
-  await ctx.cache.release(mediaId);
+  if (jobs.every((job) => TERMINAL.has(job.status))) await ctx.cache.release(mediaId);
+}
+
+/** Settles the asset and starts whatever has become ready. */
+async function advance(
+  ctx: PipelineContext,
+  mediaId: string,
+  projectId: string,
+  generation: number,
+): Promise<void> {
+  await settleMedia(ctx, mediaId);
+  await enqueueReadySteps(ctx.database, ctx.queues, mediaId, projectId, generation);
 }
 
 async function notifyChanged(ctx: PipelineContext, projectId: string, mediaId: string) {
@@ -300,10 +338,19 @@ export async function processStep(ctx: PipelineContext, job: Job<MediaJobData>):
   );
   await notifyChanged(ctx, projectId, mediaId);
 
-  await runner(ctx, media, progressReporter(ctx, media, step));
-
-  await setJobs(ctx, mediaId, [step], { status: 'done', progress: 1, error: null });
-  await settleMedia(ctx, mediaId);
+  try {
+    await runner(ctx, media, progressReporter(ctx, media, step));
+    await setJobs(ctx, mediaId, [step], { status: 'done', progress: 1, error: null });
+  } catch (err) {
+    if (!(err instanceof SkipStep)) throw err;
+    await setJobs(ctx, mediaId, [step], {
+      status: 'skipped',
+      progress: 0,
+      error: null,
+      note: err.message,
+    });
+  }
+  await advance(ctx, mediaId, projectId, media.generation);
   await notifyChanged(ctx, projectId, mediaId);
 }
 
@@ -327,11 +374,14 @@ export async function handleStepFailure(
 
   await setJobs(ctx, mediaId, [step], { status: 'failed', error: err.message });
   if (step === 'probe') {
-    await setJobs(ctx, mediaId, ['thumbnails', 'waveform', 'proxy', 'audio'], {
-      status: 'skipped',
-      progress: 0,
-    });
+    await setJobs(
+      ctx,
+      mediaId,
+      PROCESSING_STEPS.filter((other) => other !== 'probe'),
+      { status: 'skipped', progress: 0, note: 'Metadata could not be read' },
+    );
   }
-  await settleMedia(ctx, mediaId);
+  const media = await ctx.database.media.findOne({ _id: mediaId });
+  await advance(ctx, mediaId, projectId, media?.generation ?? 0);
   await notifyChanged(ctx, projectId, mediaId);
 }

@@ -1,6 +1,6 @@
 import type { Database } from '@agent-edit/infra';
 import { MediaQueues, Storage, connectMongo } from '@agent-edit/infra';
-import { MIN_PART_SIZE, QUEUES, newId } from '@agent-edit/shared';
+import { MIN_PART_SIZE, PROCESSING_STEPS, QUEUES, newId } from '@agent-edit/shared';
 import { Queue } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
@@ -224,13 +224,7 @@ describe('resumable upload', () => {
     const res = await call(actor, 'POST', `/uploads/${media.id}/complete`);
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe('processing');
-    expect(res.json().jobs.map((j: { step: string }) => j.step)).toEqual([
-      'probe',
-      'thumbnails',
-      'waveform',
-      'proxy',
-      'audio',
-    ]);
+    expect(res.json().jobs.map((j: { step: string }) => j.step)).toEqual([...PROCESSING_STEPS]);
     for (const job of res.json().jobs) expect(job).toMatchObject({ status: 'queued', progress: 0 });
 
     const doc = await database.media.findOne({ _id: media.id });

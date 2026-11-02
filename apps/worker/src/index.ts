@@ -1,5 +1,6 @@
 import { hostname } from 'node:os';
 import { join } from 'node:path';
+import { createAiProviders } from '@agent-edit/ai-engine';
 import { MediaQueues, Storage, connectMongo } from '@agent-edit/infra';
 import { ProcessTracker } from '@agent-edit/media-engine';
 import { Redis } from 'ioredis';
@@ -43,6 +44,7 @@ const mediaWorkers = await startMediaWorkers(
     cache: new SourceCache(storage, config.WORK_DIR),
     binaries: { ffmpeg: config.FFMPEG_PATH, ffprobe: config.FFPROBE_PATH },
     tracker,
+    ai: createAiProviders(config),
     log,
     signal: shutdownController.signal,
   },
@@ -50,6 +52,7 @@ const mediaWorkers = await startMediaWorkers(
     connection: redis,
     mediaConcurrency: config.MEDIA_CONCURRENCY,
     proxyConcurrency: config.PROXY_CONCURRENCY,
+    analysisConcurrency: config.ANALYSIS_CONCURRENCY,
     workDir: config.WORK_DIR,
   },
 );

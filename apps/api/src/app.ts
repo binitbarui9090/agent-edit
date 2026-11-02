@@ -7,6 +7,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
 import type { Config } from './config.js';
 import type { Database, MediaQueues, Storage } from '@agent-edit/infra';
+import { agentRoutes } from './modules/agent/routes.js';
+import { AgentService } from './modules/agent/service.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { AuthService } from './modules/auth/service.js';
 import { healthRoutes } from './modules/health/routes.js';
@@ -73,6 +75,8 @@ export async function buildApp({
 
   const timelines = new TimelineService({ database, redis, projects });
 
+  const agent = new AgentService({ database, redis, queues, projects, timelines });
+
   await app.register(authPlugin, { auth, webOrigin: config.WEB_ORIGIN });
   await app.register(healthRoutes, { prefix: '/health', database, redis, storage });
   await app.register(
@@ -81,6 +85,7 @@ export async function buildApp({
       await api.register(projectRoutes, { prefix: '/projects', projects });
       await api.register(mediaRoutes, { prefix: '/projects', media });
       await api.register(timelineRoutes, { prefix: '/projects', timelines });
+      await api.register(agentRoutes, { prefix: '/projects', agent });
       await api.register(realtimeRoutes, { auth, projects, redis, webOrigin: config.WEB_ORIGIN });
     },
     { prefix: '/api/v1' },

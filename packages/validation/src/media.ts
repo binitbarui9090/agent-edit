@@ -18,6 +18,8 @@ export const analysisJobSchema = z.object({
   status: jobStatusSchema,
   progress: z.number().min(0).max(1),
   error: z.string().nullable(),
+  provider: z.object({ id: z.string(), isMock: z.boolean() }),
+  note: z.string().nullable(),
 });
 export type AnalysisJob = z.infer<typeof analysisJobSchema>;
 
@@ -124,6 +126,12 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     type: z.literal('media.changed'),
     projectId: idSchema(ID_PREFIXES.project),
     mediaId: mediaIdSchema,
+  }),
+  z.object({
+    type: z.literal('agent.changed'),
+    projectId: idSchema(ID_PREFIXES.project),
+    timelineId: idSchema(ID_PREFIXES.timeline),
+    runId: idSchema(ID_PREFIXES.agentRun),
   }),
   z.object({
     type: z.literal('timeline.changed'),

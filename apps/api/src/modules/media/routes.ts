@@ -53,6 +53,11 @@ export async function mediaRoutes(app: FastifyInstance, { media }: { media: Medi
     return media.getPlayback(currentUser(req)._id, id, mediaId);
   });
 
+  app.get('/:id/media/:mediaId/analysis', async (req) => {
+    const { id, mediaId } = mediaParamsSchema.parse(req.params);
+    return media.analysis(currentUser(req)._id, id, mediaId);
+  });
+
   app.patch('/:id/media/:mediaId', async (req) => {
     const { id, mediaId } = mediaParamsSchema.parse(req.params);
     const input = updateMediaRequestSchema.parse(req.body);

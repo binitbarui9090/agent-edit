@@ -1,0 +1,212 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.compose {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.composeLabel {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.compose textarea {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-0);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--text-1);
+  font: inherit;
+  font-size: var(--text-sm);
+  resize: vertical;
+}
+
+.composeActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.runs {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.empty {
+  padding: 12px;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.empty ul {
+  margin-top: 8px;
+}
+
+.empty li + li {
+  margin-top: 4px;
+}
+
+.empty button {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.instruction {
+  padding: 5px 8px;
+  background: var(--bg-3);
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.stage {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+
+.spinner {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.summary {
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.provider {
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.provider[data-mock='true'],
+.warning {
+  color: var(--accent);
+  font-size: var(--text-xs);
+}
+
+.steps,
+.shorts {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.stepLabel {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.stepLabel input {
+  flex: none;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.stepSummary {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.stepReason {
+  display: block;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs);
+}
+
+.step[data-error='true'] .stepSummary,
+.step[data-error='true'] .stepReason {
+  color: var(--danger);
+}
+
+.ops {
+  flex: none;
+  color: var(--text-3);
+  font: 400 var(--text-xs) / 1.6 var(--font-data);
+}
+
+.shorts li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.note {
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.outcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.applied {
+  color: var(--success);
+  font-size: var(--text-sm);
+}
+
+.shortLink {
+  font-size: var(--text-sm);
+}

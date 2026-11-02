@@ -1,6 +1,6 @@
 import { readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { mediaPrefixes } from '@agent-edit/infra';
+import { enqueueReadySteps, mediaPrefixes } from '@agent-edit/infra';
 import type { PipelineContext } from './pipeline.js';
 
 export const PROCESS_DIR_NAME = 'processes';
@@ -34,6 +34,9 @@ async function purgeDeleted(ctx: PipelineContext, now: number): Promise<number> 
     }
     await ctx.cache.release(doc._id);
     await ctx.database.analysisJobs.deleteMany({ mediaId: doc._id });
+    await ctx.database.segments.deleteMany({ mediaId: doc._id });
+    await ctx.database.scenes.deleteMany({ mediaId: doc._id });
+    await ctx.database.moments.deleteMany({ mediaId: doc._id });
     // Last, so a crash above leaves the record for the next sweep to finish.
     await ctx.database.media.deleteOne({ _id: doc._id });
   }
@@ -67,15 +70,9 @@ async function requeueLostJobs(ctx: PipelineContext, now: number): Promise<numbe
   for (const job of jobs) {
     const media = await ctx.database.media.findOne({ _id: job.mediaId, deletedAt: null });
     if (!media || media.status !== 'processing') continue;
-    // Other steps are enqueued by the probe, so they are not lost until the probe has finished.
-    if (job.step !== 'probe' && !media.probe) continue;
     if (await ctx.queues.exists(job.step, job.mediaId, media.generation)) continue;
-    await ctx.queues.enqueue(
-      job.step,
-      { mediaId: job.mediaId, projectId: job.projectId },
-      media.generation,
-    );
-    requeued++;
+    await enqueueReadySteps(ctx.database, ctx.queues, job.mediaId, job.projectId, media.generation);
+    if (await ctx.queues.exists(job.step, job.mediaId, media.generation)) requeued++;
   }
   return requeued;
 }

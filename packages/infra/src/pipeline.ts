@@ -1,4 +1,4 @@
-import { QUEUES, type ProcessingStep } from '@agent-edit/shared';
+import { QUEUES, queueForStep, type ProcessingStep } from '@agent-edit/shared';
 import { Queue, type JobsOptions, type QueueOptions } from 'bullmq';
 import type { AnalysisJobDoc } from './mongo.js';
 
@@ -19,17 +19,25 @@ export function mediaJobId(mediaId: string, step: ProcessingStep, generation: nu
   return `${mediaId}.${step}.${generation}`;
 }
 
+export interface AgentJobData {
+  runId: string;
+}
+
 export class MediaQueues {
   private readonly media: Queue<MediaJobData>;
   private readonly proxy: Queue<MediaJobData>;
+  private readonly analysis: Queue<MediaJobData>;
+  private readonly agent: Queue<AgentJobData>;
 
   constructor(options: QueueOptions) {
     this.media = new Queue(QUEUES.media, options);
     this.proxy = new Queue(QUEUES.proxy, options);
+    this.analysis = new Queue(QUEUES.analysis, options);
+    this.agent = new Queue(QUEUES.agent, options);
   }
 
   private queueFor(step: ProcessingStep) {
-    return step === 'proxy' ? this.proxy : this.media;
+    return this[queueForStep(step)];
   }
 
   async enqueue(step: ProcessingStep, data: MediaJobData, generation: number): Promise<void> {
@@ -44,8 +52,22 @@ export class MediaQueues {
     return job !== undefined;
   }
 
+  /** Not retried by BullMQ: a repeated model call costs money and rarely changes the answer. */
+  async enqueueAgent(runId: string): Promise<void> {
+    await this.agent.add(
+      'plan',
+      { runId },
+      { jobId: runId, removeOnComplete: { age: 86_400 }, removeOnFail: { age: 604_800 } },
+    );
+  }
+
   async close(): Promise<void> {
-    await Promise.all([this.media.close(), this.proxy.close()]);
+    await Promise.all([
+      this.media.close(),
+      this.proxy.close(),
+      this.analysis.close(),
+      this.agent.close(),
+    ]);
   }
 }
 
@@ -64,8 +86,9 @@ export function newJobDoc(
     progress: 0,
     attempts: 0,
     error: null,
-    // Everything in this pipeline is real FFmpeg work. AI steps will record their adapter here.
+    // AI steps overwrite this with the adapter that actually did the work.
     provider: { id: 'ffmpeg', isMock: false },
+    note: null,
     startedAt: null,
     finishedAt: null,
     updatedAt: now,

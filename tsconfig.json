@@ -6,6 +6,7 @@
     { "path": "packages/timeline-engine" },
     { "path": "packages/infra" },
     { "path": "packages/media-engine" },
+    { "path": "packages/ai-engine" },
     { "path": "apps/api" },
     { "path": "apps/worker" }
   ]

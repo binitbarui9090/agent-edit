@@ -91,7 +91,10 @@ export function MediaRow({
   const probe = asset.probe;
   const canPreview = asset.jobs.some((job) => job.step === 'proxy' && job.status === 'done');
   const failedJobs = asset.jobs.filter((job) => job.status === 'failed');
-  const showSteps = asset.status === 'processing' || failedJobs.length > 0;
+  const stillWorking = asset.jobs.some(
+    (job) => job.status === 'queued' || job.status === 'running',
+  );
+  const showSteps = stillWorking || failedJobs.length > 0;
   const actionError = remove.error ?? retry.error ?? discard.error;
 
   return (

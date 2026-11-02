@@ -10,15 +10,20 @@ const SILENCE_LIMIT_MS = 60_000;
 /** The server closed for a reason reconnecting cannot fix: session ended or project gone. */
 const FINAL_CLOSE_CODES = new Set([4401, 4404]);
 
+export interface ProjectEventListeners {
+  onTimelineChanged?: (revision: number) => void;
+  onAgentChanged?: (timelineId: string) => void;
+}
+
 /** Returns whether the socket is live, so callers can fall back to polling and say so. */
 export function useProjectEvents(
   projectId: string,
-  onTimelineChanged?: (revision: number) => void,
+  listeners: ProjectEventListeners = {},
 ): boolean {
   const client = useQueryClient();
   const [live, setLive] = useState(false);
-  const timelineListener = useRef(onTimelineChanged);
-  timelineListener.current = onTimelineChanged;
+  const current = useRef(listeners);
+  current.current = listeners;
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -75,7 +80,9 @@ export function useProjectEvents(
         const event = serverEventSchema.safeParse(message);
         if (!event.success) return;
         if (event.data.type === 'timeline.changed') {
-          timelineListener.current?.(event.data.revision);
+          current.current.onTimelineChanged?.(event.data.revision);
+        } else if (event.data.type === 'agent.changed') {
+          current.current.onAgentChanged?.(event.data.timelineId);
         } else if (event.data.type === 'job.progress') {
           const { mediaId, step, status, progress } = event.data;
           patchJobProgress(client, projectId, mediaId, { step, status, progress });

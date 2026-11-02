@@ -18,6 +18,12 @@
     },
     {
       "path": "../../packages/media-engine"
+    },
+    {
+      "path": "../../packages/ai-engine"
+    },
+    {
+      "path": "../../packages/timeline-engine"
     }
   ]
 }

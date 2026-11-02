@@ -148,10 +148,7 @@ export function MediaLibraryPage() {
       <div className={styles.pending}>
         <Pending
           title="Not built yet"
-          items={[
-            { name: 'AI analysis and agent', phase: 4, detail: 'Transcripts and edit plans.' },
-            { name: 'Render and export', phase: 5, detail: 'Final video output.' },
-          ]}
+          items={[{ name: 'Render and export', phase: 5, detail: 'Final video output.' }]}
         />
       </div>
     </div>

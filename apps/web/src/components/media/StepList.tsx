@@ -11,7 +11,7 @@ function stepText(job: AnalysisJob): string {
     case 'failed':
       return 'Failed';
     case 'skipped':
-      return 'n/a';
+      return 'Skipped';
     case 'queued':
       return job.error ? 'Retrying' : 'Queued';
   }
@@ -22,7 +22,12 @@ export function StepList({ jobs }: { jobs: AnalysisJob[] }) {
   return (
     <ul className={styles.steps}>
       {jobs.map((job) => (
-        <li key={job.step} className={styles.step} data-status={job.status} title={job.error ?? ''}>
+        <li
+          key={job.step}
+          className={styles.step}
+          data-status={job.status}
+          title={job.error ?? job.note ?? ''}
+        >
           <span className={styles.label}>{STEP_LABELS[job.step]}</span>
           <span className={styles.value}>{stepText(job)}</span>
           {job.status === 'running' && (
