@@ -4,8 +4,9 @@ import { AppShell } from './components/AppShell';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { NewProjectPage } from './pages/NewProjectPage';
+import { MediaLibraryPage } from './pages/MediaLibraryPage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { ProjectPage } from './pages/ProjectPage';
+import { ProjectLayout, ProjectSettingsPage } from './pages/ProjectPage';
 
 function RequireAuth() {
   const me = useMe();
@@ -36,7 +37,10 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/projects/new" element={<NewProjectPage />} />
-        <Route path="/projects/:id" element={<ProjectPage />} />
+        <Route path="/projects/:id" element={<ProjectLayout />}>
+          <Route index element={<MediaLibraryPage />} />
+          <Route path="settings" element={<ProjectSettingsPage />} />
+        </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

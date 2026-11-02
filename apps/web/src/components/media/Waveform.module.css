@@ -1,0 +1,12 @@
+.waveform {
+  display: block;
+  width: 100%;
+  height: 48px;
+  background: var(--bg-0);
+  color: var(--accent);
+}
+
+.failed {
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}

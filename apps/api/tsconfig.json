@@ -1,7 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "dist" },
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../../packages/shared" }, { "path": "../../packages/validation" }]
+  "references": [
+    {
+      "path": "../../packages/shared"
+    },
+    {
+      "path": "../../packages/validation"
+    },
+    {
+      "path": "../../packages/infra"
+    }
+  ]
 }

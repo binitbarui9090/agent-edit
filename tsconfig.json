@@ -3,6 +3,8 @@
   "references": [
     { "path": "packages/shared" },
     { "path": "packages/validation" },
+    { "path": "packages/infra" },
+    { "path": "packages/media-engine" },
     { "path": "apps/api" },
     { "path": "apps/worker" }
   ]

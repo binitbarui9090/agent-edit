@@ -47,10 +47,21 @@ export const listProjectsQuerySchema = z.strictObject({
   cursor: z.string().max(200).optional(),
 });
 
+export const projectMediaSummarySchema = z.object({
+  total: z.number().int().nonnegative(),
+  ready: z.number().int().nonnegative(),
+  processing: z.number().int().nonnegative(),
+  uploading: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  posterUrl: z.url().nullable(),
+});
+export type ProjectMediaSummary = z.infer<typeof projectMediaSummarySchema>;
+
 export const projectSchema = z.object({
   id: idSchema(ID_PREFIXES.project),
   name: z.string(),
   settings: projectSettingsSchema,
+  media: projectMediaSummarySchema,
   createdAt: isoDateSchema,
   updatedAt: isoDateSchema,
 });

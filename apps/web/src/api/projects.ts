@@ -13,8 +13,8 @@ import {
 } from '@tanstack/react-query';
 import { request } from './client';
 
-const PROJECTS_KEY = ['projects'] as const;
-const projectKey = (id: string) => ['project', id] as const;
+export const PROJECTS_KEY = ['projects'] as const;
+export const projectKey = (id: string) => ['project', id] as const;
 
 /**
  * Refetches the list even while no dashboard is mounted, and resolves first. Mutations navigate back
@@ -33,6 +33,13 @@ export function useProjects() {
       return request('GET', `/projects${query}`, { schema: projectListSchema });
     },
     getNextPageParam: (page) => page.nextCursor,
+    // No per-project socket here, so busy footage is polled to keep its status honest.
+    refetchInterval: (query) => {
+      const busy = query.state.data?.pages.some((page) =>
+        page.items.some(({ media }) => media.processing + media.uploading > 0),
+      );
+      return busy ? 5000 : false;
+    },
   });
 }
 

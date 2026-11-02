@@ -1,10 +1,10 @@
 import { updateProjectRequestSchema, type Project } from '@agent-edit/validation';
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router';
+import { useProjectEvents } from '../api/events';
 import { useDeleteProject, useProject, useUpdateProject } from '../api/projects';
 import { Button } from '../components/Button';
 import { Field, FormError } from '../components/Field';
-import { Pending } from '../components/Pending';
 import { SettingsFields } from '../components/SettingsFields';
 import {
   apiFieldErrors,
@@ -16,7 +16,12 @@ import {
 import { NotFoundPage } from './NotFoundPage';
 import styles from './ProjectForms.module.css';
 
-export function ProjectPage() {
+export interface ProjectOutletContext {
+  project: Project;
+  live: boolean;
+}
+
+export function ProjectLayout() {
   const { id = '' } = useParams();
   const query = useProject(id);
 
@@ -24,11 +29,38 @@ export function ProjectPage() {
   if (query.isError) {
     return <NotFoundPage title="Project not found" detail={errorMessage(query.error)} />;
   }
-  // Remount when the id changes, so the form cannot show another project's edits.
-  return <ProjectEditor key={query.data.id} project={query.data} />;
+  return <ProjectFrame key={query.data.id} project={query.data} />;
 }
 
-function ProjectEditor({ project }: { project: Project }) {
+function ProjectFrame({ project }: { project: Project }) {
+  const live = useProjectEvents(project.id);
+  const tabClass = ({ isActive }: { isActive: boolean }) =>
+    isActive ? `${styles.tab} ${styles.tabActive}` : styles.tab;
+
+  return (
+    <div className={styles.page}>
+      <title>{`${project.name} · Agent Edit`}</title>
+      <nav className={styles.crumbs} aria-label="Breadcrumb">
+        <Link to="/">Projects</Link>
+        <span aria-hidden="true">/</span>
+        <span>{project.name}</span>
+      </nav>
+      <h1 className={styles.title}>{project.name}</h1>
+      <nav className={styles.tabs} aria-label="Project">
+        <NavLink end to={`/projects/${project.id}`} className={tabClass}>
+          Media
+        </NavLink>
+        <NavLink to={`/projects/${project.id}/settings`} className={tabClass}>
+          Settings
+        </NavLink>
+      </nav>
+      <Outlet context={{ project, live } satisfies ProjectOutletContext} />
+    </div>
+  );
+}
+
+export function ProjectSettingsPage() {
+  const { project } = useOutletContext<ProjectOutletContext>();
   const update = useUpdateProject(project.id);
   const [name, setName] = useState(project.name);
   const [settings, setSettings] = useState(project.settings);
@@ -55,56 +87,32 @@ function ProjectEditor({ project }: { project: Project }) {
   }
 
   return (
-    <div className={styles.page}>
-      <title>{`${project.name} · Agent Edit`}</title>
-      <nav className={styles.crumbs} aria-label="Breadcrumb">
-        <Link to="/">Projects</Link>
-        <span aria-hidden="true">/</span>
-        <span>{project.name}</span>
-      </nav>
-      <h1 className={styles.title}>{project.name}</h1>
-
-      <div className={styles.layout}>
-        <div>
-          <form className={styles.form} onSubmit={submit} noValidate>
-            <FormError message={errorMessage(update.error)} />
-            <Field
-              label="Name"
-              value={name}
-              error={errors.name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setClientErrors(withoutField(clientErrors, 'name'));
-                update.reset();
-              }}
-            />
-            <SettingsFields value={settings} onChange={setSettings} />
-            <div className={styles.actions}>
-              <Button type="submit" variant="primary" disabled={!dirty || update.isPending}>
-                {update.isPending ? 'Saving…' : 'Save changes'}
-              </Button>
-              {!dirty && update.isSuccess && (
-                <span className={styles.saved} role="status">
-                  Saved
-                </span>
-              )}
-            </div>
-          </form>
-          <DeleteProject id={project.id} />
+    <div>
+      <form className={styles.form} onSubmit={submit} noValidate>
+        <FormError message={errorMessage(update.error)} />
+        <Field
+          label="Name"
+          value={name}
+          error={errors.name}
+          onChange={(e) => {
+            setName(e.target.value);
+            setClientErrors(withoutField(clientErrors, 'name'));
+            update.reset();
+          }}
+        />
+        <SettingsFields value={settings} onChange={setSettings} />
+        <div className={styles.actions}>
+          <Button type="submit" variant="primary" disabled={!dirty || update.isPending}>
+            {update.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
+          {!dirty && update.isSuccess && (
+            <span className={styles.saved} role="status">
+              Saved
+            </span>
+          )}
         </div>
-
-        <div className={styles.side}>
-          <Pending
-            title="Not built yet"
-            items={[
-              { name: 'Media library', phase: 2, detail: 'Upload and organise footage.' },
-              { name: 'Timeline editor', phase: 3, detail: 'Multi-track editing and playback.' },
-              { name: 'AI analysis and agent', phase: 4, detail: 'Transcripts and edit plans.' },
-              { name: 'Render and export', phase: 5, detail: 'Final video output.' },
-            ]}
-          />
-        </div>
-      </div>
+      </form>
+      <DeleteProject id={project.id} />
     </div>
   );
 }
@@ -117,7 +125,10 @@ function DeleteProject({ id }: { id: string }) {
   return (
     <section className={styles.danger}>
       <h2 className={styles.dangerTitle}>Delete project</h2>
-      <p className={styles.dangerText}>Removes this project from your account.</p>
+      <p className={styles.dangerText}>
+        Removes this project and its footage. Stored files are permanently deleted within about an
+        hour.
+      </p>
       <FormError message={errorMessage(remove.error)} />
       <div className={styles.actions}>
         {confirming ? (

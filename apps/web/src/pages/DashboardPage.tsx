@@ -1,4 +1,5 @@
 import { frameRateLabel } from '@agent-edit/shared';
+import type { ProjectMediaSummary } from '@agent-edit/validation';
 import { Link } from 'react-router';
 import { useProjects } from '../api/projects';
 import { Button, ButtonLink } from '../components/Button';
@@ -8,6 +9,17 @@ import { Pending } from '../components/Pending';
 import { errorMessage } from '../lib/form-errors';
 import { formatAbsoluteTime, formatRelativeTime } from '../lib/format';
 import styles from './DashboardPage.module.css';
+
+function footageSummary({ total, processing, uploading, failed }: ProjectMediaSummary): string {
+  if (total === 0) return 'None';
+  const clips = `${total} ${total === 1 ? 'clip' : 'clips'}`;
+  const state = [
+    uploading > 0 && `${uploading} uploading`,
+    processing > 0 && `${processing} processing`,
+    failed > 0 && `${failed} failed`,
+  ].filter(Boolean);
+  return state.length > 0 ? `${clips} · ${state.join(', ')}` : clips;
+}
 
 export function DashboardPage() {
   const query = useProjects();
@@ -41,6 +53,9 @@ export function DashboardPage() {
                   <span className={styles.srOnly}>Format</span>
                 </th>
                 <th scope="col">Name</th>
+                <th scope="col" className={styles.footage}>
+                  Footage
+                </th>
                 <th scope="col" className={styles.optional}>
                   Resolution
                 </th>
@@ -56,10 +71,17 @@ export function DashboardPage() {
               {projects.map((project) => (
                 <tr key={project.id} className={styles.row}>
                   <td className={styles.frameCell}>
-                    <FormatFrame aspect={project.settings.aspectRatio} />
+                    {project.media.posterUrl ? (
+                      <img className={styles.poster} src={project.media.posterUrl} alt="" />
+                    ) : (
+                      <FormatFrame aspect={project.settings.aspectRatio} />
+                    )}
                   </td>
                   <td className={styles.name}>
                     <Link to={`/projects/${project.id}`}>{project.name}</Link>
+                  </td>
+                  <td className={`${styles.data} ${styles.footage}`}>
+                    {footageSummary(project.media)}
                   </td>
                   <td className={`${styles.data} ${styles.optional}`}>
                     {project.settings.width} × {project.settings.height}
@@ -96,11 +118,6 @@ export function DashboardPage() {
         <Pending
           title="Not built yet"
           items={[
-            {
-              name: 'Footage upload',
-              phase: 2,
-              detail: 'Resumable uploads, thumbnails and processing status.',
-            },
             {
               name: 'Export history',
               phase: 5,

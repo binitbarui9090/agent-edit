@@ -1,0 +1,24 @@
+{
+  "name": "@agent-edit/infra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@agent-edit/shared": "*",
+    "@agent-edit/validation": "*",
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@aws-sdk/lib-storage": "^3.1161.0",
+    "@aws-sdk/s3-request-presigner": "^3.1161.0",
+    "bullmq": "^6.5.4",
+    "ioredis": "^6.0.0",
+    "mongodb": "^7.8.0",
+    "zod": "^4.6.7"
+  }
+}

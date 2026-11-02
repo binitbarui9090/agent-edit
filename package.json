@@ -16,7 +16,8 @@
     "build": "tsc -b && npm run build -w @agent-edit/web",
     "typecheck": "tsc -b && tsc -p apps/web/tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
-    "test:e2e": "node e2e/walkthrough.mjs",
+    "test:e2e": "node e2e/walkthrough.mjs && node --env-file-if-exists=.env e2e/media.mjs",
+    "test:long": "node --env-file-if-exists=.env e2e/long-recording.mjs",
     "format": "prettier --write ."
   },
   "devDependencies": {
@@ -26,6 +27,8 @@
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
+    "@types/ws": "^8.18.1",
+    "ws": "^8.18.3",
     "vitest": "^5.1.0"
   }
 }

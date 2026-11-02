@@ -48,7 +48,18 @@
 }
 
 .frameCell {
-  width: 44px;
+  width: 68px;
+}
+
+.poster {
+  display: block;
+  width: 54px;
+  height: 30px;
+  object-fit: cover;
+}
+
+.footage {
+  width: 220px;
 }
 
 .table td.frameCell {
@@ -135,6 +146,12 @@
   .page {
     grid-template-columns: minmax(0, 1fr);
     gap: 28px;
+  }
+}
+
+@media (max-width: 860px) {
+  .footage {
+    display: none;
   }
 }
 

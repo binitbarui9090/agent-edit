@@ -1,7 +1,7 @@
 import { WORKER_HEARTBEAT_PREFIX } from '@agent-edit/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
-import type { Database } from '../../infra/mongo.js';
+import type { Database, Storage } from '@agent-edit/infra';
 
 async function check(probe: () => Promise<unknown>): Promise<boolean> {
   try {
@@ -31,7 +31,7 @@ async function countWorkers(redis: Redis): Promise<number> {
 
 export async function healthRoutes(
   app: FastifyInstance,
-  { database, redis }: { database: Database; redis: Redis },
+  { database, redis, storage }: { database: Database; redis: Redis; storage: Storage },
 ) {
   const noLimit = { config: { rateLimit: false } } as const;
 
@@ -39,14 +39,19 @@ export async function healthRoutes(
 
   // Workers are reported but do not gate readiness: the API can still serve while they restart.
   app.get('/ready', noLimit, async (_req, reply) => {
-    const [mongo, redisUp] = await Promise.all([
+    const [mongo, redisUp, storageUp] = await Promise.all([
       check(() => database.db.command({ ping: 1 })),
       check(() => redis.ping()),
+      check(() => storage.ping()),
     ]);
     const workers = redisUp ? await countWorkers(redis).catch(() => 0) : 0;
-    const ready = mongo && redisUp;
-    return reply
-      .status(ready ? 200 : 503)
-      .send({ status: ready ? 'ok' : 'unavailable', mongo, redis: redisUp, workers });
+    const ready = mongo && redisUp && storageUp;
+    return reply.status(ready ? 200 : 503).send({
+      status: ready ? 'ok' : 'unavailable',
+      mongo,
+      redis: redisUp,
+      storage: storageUp,
+      workers,
+    });
   });
 }

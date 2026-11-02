@@ -4,7 +4,7 @@ import type { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
-import { connectMongo, type Database } from './infra/mongo.js';
+import { MediaQueues, Storage, connectMongo, type Database } from '@agent-edit/infra';
 import { createRedis } from './infra/redis.js';
 
 // Runs against the real services from docker-compose.yml, in a throwaway database.
@@ -15,6 +15,15 @@ const config = loadConfig({
   MONGO_URL: process.env.MONGO_URL ?? 'mongodb://127.0.0.1:27017',
   MONGO_DB: DB_NAME,
   REDIS_URL: process.env.REDIS_URL ?? 'redis://127.0.0.1:6380',
+  S3_ENDPOINT: process.env.S3_ENDPOINT ?? 'http://127.0.0.1:8333',
+  S3_PUBLIC_ENDPOINT: process.env.S3_ENDPOINT ?? 'http://127.0.0.1:8333',
+  S3_REGION: 'us-east-1',
+  // A fixed name, so a crashed run cannot leak buckets: storage reserves volumes for each one.
+  S3_BUCKET: 'agent-edit-test-api',
+  S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID ?? 'agent-edit-dev',
+  S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY ?? 'agent-edit-dev-secret',
+  // Small enough for the size-limit test, large enough for its multipart files.
+  MAX_UPLOAD_BYTES: String(64 * 1024 * 1024),
   RATE_LIMIT_GLOBAL_PER_MINUTE: '100000',
   RATE_LIMIT_AUTH_PER_MINUTE: '1000',
 });
@@ -30,6 +39,8 @@ const password = 'correct horse battery staple';
 let app: FastifyInstance;
 let database: Database;
 let redis: Redis;
+let storage: Storage;
+let queues: MediaQueues;
 
 async function signUp(
   email = `${newId('usr')}@example.com`,
@@ -48,12 +59,17 @@ async function signUp(
 beforeAll(async () => {
   database = await connectMongo(config.MONGO_URL, config.MONGO_DB);
   redis = createRedis(config.REDIS_URL);
-  app = await buildApp({ config, database, redis });
+  storage = new Storage(config);
+  await storage.ensureBucket([config.WEB_ORIGIN]);
+  queues = new MediaQueues({ connection: redis, prefix: DB_NAME });
+  app = await buildApp({ config, database, redis, storage, queues });
   await app.ready();
 });
 
 afterAll(async () => {
   await app.close();
+  await queues.close();
+  await storage.deleteBucket();
   await database.db.dropDatabase();
   await database.client.close();
   const keys = await redis.keys(`${DB_NAME}:*`);
@@ -65,7 +81,7 @@ describe('health', () => {
   it('reports real dependency state', async () => {
     const res = await app.inject({ url: '/health/ready' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ status: 'ok', mongo: true, redis: true });
+    expect(res.json()).toMatchObject({ status: 'ok', mongo: true, redis: true, storage: true });
   });
 });
 
@@ -284,7 +300,7 @@ describe('projects', () => {
 describe('platform', () => {
   it('keeps serving and reports the truth when Redis is unreachable', async () => {
     const deadRedis = createRedis('redis://127.0.0.1:1');
-    const degraded = await buildApp({ config, database, redis: deadRedis });
+    const degraded = await buildApp({ config, database, redis: deadRedis, storage, queues });
     await degraded.ready();
 
     const ready = await degraded.inject({ url: '/health/ready' });
@@ -317,6 +333,8 @@ describe('platform', () => {
       },
       database,
       redis,
+      storage,
+      queues,
     });
     await strict.ready();
     const attempt = () =>

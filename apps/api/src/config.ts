@@ -1,6 +1,7 @@
+import { storageEnvSchema } from '@agent-edit/infra';
 import { z } from 'zod';
 
-const envSchema = z.object({
+const envSchema = storageEnvSchema.extend({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   API_HOST: z.string().default('127.0.0.1'),
@@ -11,6 +12,11 @@ const envSchema = z.object({
   MONGO_URL: z.string().min(1),
   MONGO_DB: z.string().min(1),
   REDIS_URL: z.string().min(1),
+  MAX_UPLOAD_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(200 * 1024 ** 3),
   RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().positive().default(600),
   RATE_LIMIT_AUTH_PER_MINUTE: z.coerce.number().int().positive().default(10),
 });

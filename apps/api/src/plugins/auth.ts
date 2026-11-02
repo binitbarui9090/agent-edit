@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { AppError } from '../errors.js';
-import type { UserDoc } from '../infra/mongo.js';
+import type { UserDoc } from '@agent-edit/infra';
 import type { AuthService } from '../modules/auth/service.js';
 
 export const SESSION_COOKIE = 'ae_session';

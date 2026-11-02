@@ -1,0 +1,80 @@
+.list {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  padding: 8px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.name {
+  overflow: hidden;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.status {
+  flex: none;
+  max-width: 60%;
+  overflow: hidden;
+  color: var(--text-2);
+  font: 400 var(--text-sm) / 1.6 var(--font-data);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.row[data-phase='failed'] .status {
+  color: var(--danger);
+}
+
+.row[data-phase='retrying'] .status {
+  color: var(--accent);
+}
+
+.track {
+  height: 3px;
+  margin-top: 5px;
+  background: var(--bg-3);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform 150ms linear;
+}
+
+.row[data-phase='done'] .fill {
+  background: var(--success);
+}
+
+.row[data-phase='failed'] .fill {
+  background: var(--danger);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+}
+
+.bytes {
+  color: var(--text-3);
+  font: 400 var(--text-xs) / 1.4 var(--font-data);
+}
+
+.actions {
+  display: flex;
+  flex: none;
+}

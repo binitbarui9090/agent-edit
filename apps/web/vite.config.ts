@@ -10,6 +10,6 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     // Same origin in dev, so the session cookie behaves as it does in production.
-    proxy: { '/api': API, '/health': API },
+    proxy: { '/api': { target: API, ws: true }, '/health': API },
   },
 });

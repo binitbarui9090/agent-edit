@@ -12,7 +12,7 @@ Status of each section is tracked in [Phased plan](#8-phased-development-plan). 
 | Node / npm       | 26.13 / 11.20; no pnpm                                                                              | npm workspaces, no extra tooling                                                         |
 | Docker           | CLI + Compose via Colima; the `vdo` project's stack shares this runtime and publishes Redis on 6379 | All infra runs through `docker-compose.yml`; Agent Edit's Redis is on host port **6380** |
 | MongoDB, Redis   | Not installed                                                                                       | Containers only                                                                          |
-| FFmpeg / FFprobe | Not installed                                                                                       | **Required from Phase 2**: `brew install ffmpeg`                                         |
+| FFmpeg / FFprobe | 9.0.2 via Homebrew, with libx264, aac and flac                                                      | Required on any machine running the worker                                               |
 | Ollama           | Running; `gemma3:4b`, `qwen3:1.7b`, `qwen3:8b`                                                      | Free local LLM adapter is viable for development                                         |
 | Hardware         | Apple Silicon, 10 cores, 24 GB, 261 GB free                                                         | Local Whisper is viable; long proxies and renders are slow but workable                  |
 
@@ -51,8 +51,9 @@ apps/api                 HTTP + WebSocket; never runs heavy work
 apps/worker              BullMQ consumers; the only process that spawns FFmpeg
 packages/shared          Time math, IDs, constants, error codes (no dependencies)
 packages/validation      Zod schemas: the single contract for API, DB and operations
+packages/infra           MongoDB documents, S3 storage, queues and events shared by API and worker
 packages/timeline-engine Pure operation reducer + invariants (Phase 3)
-packages/media-engine    FFmpeg wrappers, timeline → render graph compiler (Phase 2, 5)
+packages/media-engine    FFmpeg steps with no knowledge of queues or storage; render compiler (Phase 5)
 packages/ai-engine       Provider adapters, edit planner, plan compiler (Phase 4)
 ```
 
@@ -60,16 +61,17 @@ Packages are created in the phase that gives them real content. Empty placeholde
 
 ### Key decisions
 
-| Decision         | Choice                                                         | Why                                                                                                                                                                           |
-| ---------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Time unit        | Integer **flicks** (705,600,000/s)                             | Exact for 23.976–60 fps and 44.1/48 kHz, so splits and sums never drift. JSON-safe up to about 147 days. Floats and microseconds both accumulate rounding error at 29.97 fps. |
-| Timeline storage | One Mongo document per timeline, compare-and-set on `revision` | Single-document writes are atomic without a replica set. 16 MB holds tens of thousands of clips.                                                                              |
-| Edit authority   | Pure reducer shared by client and server                       | The same code runs optimistic edits, AI preview and server commit, so the three cannot disagree.                                                                              |
-| History          | Append-only transaction log; undo is a new transaction         | Nothing is ever rewritten; AI vs. manual attribution survives undo.                                                                                                           |
-| Uploads          | Browser → S3 multipart with presigned URLs                     | API stays small; resume is `ListParts`, not custom state.                                                                                                                     |
-| Sessions         | Opaque token, SHA-256 stored in Mongo, httpOnly cookie         | Instantly revocable; no JWT key management.                                                                                                                                   |
-| ODM              | Native driver + Zod                                            | One schema source; no parallel Mongoose definitions.                                                                                                                          |
-| Password hash    | `node:crypto` scrypt                                           | No native addon to break across Node versions.                                                                                                                                |
+| Decision         | Choice                                                            | Why                                                                                                                                                                                |
+| ---------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Time unit        | Integer **flicks** (705,600,000/s)                                | Exact for 23.976–60 fps and 44.1/48 kHz, so splits and sums never drift. JSON-safe up to about 147 days. Floats and microseconds both accumulate rounding error at 29.97 fps.      |
+| Timeline storage | One Mongo document per timeline, compare-and-set on `revision`    | Single-document writes are atomic without a replica set. 16 MB holds tens of thousands of clips.                                                                                   |
+| Edit authority   | Pure reducer shared by client and server                          | The same code runs optimistic edits, AI preview and server commit, so the three cannot disagree.                                                                                   |
+| History          | Append-only transaction log; undo is a new transaction            | Nothing is ever rewritten; AI vs. manual attribution survives undo.                                                                                                                |
+| Uploads          | Browser → S3 multipart with presigned URLs                        | API stays small; resume is `ListParts`, not custom state.                                                                                                                          |
+| Object storage   | SeaweedFS in development, any S3-compatible service in production | Tested against presigned multipart, `ListParts` resume, ETag under CORS, range requests and signature rejection before adoption. The MinIO image could not be pulled when checked. |
+| Sessions         | Opaque token, SHA-256 stored in Mongo, httpOnly cookie            | Instantly revocable; no JWT key management.                                                                                                                                        |
+| ODM              | Native driver + Zod                                               | One schema source; no parallel Mongoose definitions.                                                                                                                               |
+| Password hash    | `node:crypto` scrypt                                              | No native addon to break across Node versions.                                                                                                                                     |
 
 ## 3. Data flow
 
@@ -218,7 +220,15 @@ Ripple delete is not an operation. It compiles to `remove_clip` plus `move_clip`
 
 **Render compiler.** A pure function `Timeline → RenderGraph → ffmpeg args`, tested by snapshot and by probing real outputs. It uses per-clip `trim`/`setpts`/`scale`/`overlay`, `atrim`/`atempo`/`volume`/`loudnorm`/`afftdn`/`afade`/`amix`, and `ass`/`subtitles` for captions, passed through `-filter_complex_script` so long timelines do not hit argv limits.
 
-**FFmpeg safety.** Worker process only; `spawn` with an argv array and no shell; `-nostdin`; `-protocol_whitelist file,crypto,data` so a crafted playlist cannot read local files or reach the network; per-job temp directory; timeouts and CPU/memory limits. Originals are read-only, and output keys are generated rather than taken from user input.
+**FFmpeg safety.** Worker process only; `spawn` with an argv array and no shell; `-nostdin`; `-protocol_whitelist file,pipe` plus `-format_whitelist mov,matroska,webm`. The second flag matters: a file named `.mp4` whose content is an ffconcat script would otherwise follow relative paths to sibling files, and a test proves that attack succeeds without it. Each job gets its own scratch directory, a read-only source copy and a kill-on-stall timer. Originals are never modified, and storage keys are generated rather than taken from user input.
+
+**Not implemented yet:** per-process CPU and memory limits. In production these belong on the worker container, which must be isolated from the API and from secrets it does not need.
+
+**Processing pipeline.** `complete` seeds one `AnalysisJob` per step and enqueues `probe`, which enqueues `thumbnails`, `waveform`, `proxy` and `audio`. Proxy encodes have their own queue so a long encode cannot delay quick steps on other footage. BullMQ job ids are deterministic, so enqueueing is safe to repeat. Required steps are `probe` and `proxy`; if a thumbnail or waveform step fails, the asset is still usable and the failure stays visible and retryable. A periodic sweep purges deleted media, aborts uploads abandoned for 7 days, requeues jobs whose queue entry was lost and removes stale scratch directories.
+
+**Measured on a 3-hour, 3.32 GB file** (Apple Silicon, 10 cores; `npm run test:long`): processing took 9.6 minutes including a crash, about 19x real time. Peak memory was 264 MB for the worker, 314 MB for FFmpeg and 32 MB of browser heap. Seeking the proxy to the 2-hour mark took about 200 ms. The footage is synthetic noise, so these are indicative rather than a benchmark of real recordings.
+
+**Realtime.** Workers publish to Redis; the API relays to sockets watching that project. MongoDB stays the source of truth, so a missed event costs nothing beyond a refetch. The client treats 60 seconds without a server heartbeat, or a browser `offline` event, as a lost connection, says so, and polls until it reconnects.
 
 ## 7. AI and infrastructure requirements
 
@@ -238,14 +248,14 @@ Infrastructure: MongoDB, Redis (`noeviction`, which BullMQ requires) and S3-comp
 
 ## 8. Phased development plan
 
-| Phase             | Scope                                                                                                                 | Acceptance                                                            |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| **1. Foundation** | Monorepo, web/api/worker, Mongo, Redis, shared contracts, auth, project CRUD                                          | Tests pass against real services; browser walk-through works          |
-| **2. Media**      | Storage, resumable multipart upload, FFprobe, thumbnails, waveform, proxy, job DAG, WebSocket progress, media library | Interrupt and resume a multi-GB upload; proxy plays                   |
-| **3. Timeline**   | `timeline-engine`, op log, multi-track editor, playback, undo/redo, versions                                          | Every gesture changes persisted state; 500-clip timeline stays smooth |
-| **4. AI**         | Adapters, transcription, scenes, speakers, moments, planner, proposal flow                                            | Plan → preview → apply → undo with attribution                        |
-| **5. Render**     | Compiler, multi-track output, audio, captions, export jobs, signed download                                           | Output duration and streams match the timeline when probed            |
-| **6. Advanced**   | B-roll, Shorts as independent timelines, reframing, advanced audio                                                    | Demo steps 7–11 end to end                                            |
-| **7. Hardening**  | Profiling, integration tests, security review, render validation                                                      | The full 15-step demo is the acceptance test                          |
+| Phase                | Scope                                                                                                                 | Acceptance                                                            |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| **1. Foundation** ✅ | Monorepo, web/api/worker, Mongo, Redis, shared contracts, auth, project CRUD                                          | Tests pass against real services; browser walk-through works          |
+| **2. Media** ✅      | Storage, resumable multipart upload, FFprobe, thumbnails, waveform, proxy, job DAG, WebSocket progress, media library | Interrupt and resume a multi-GB upload; proxy plays                   |
+| **3. Timeline**      | `timeline-engine`, op log, multi-track editor, playback, undo/redo, versions                                          | Every gesture changes persisted state; 500-clip timeline stays smooth |
+| **4. AI**            | Adapters, transcription, scenes, speakers, moments, planner, proposal flow                                            | Plan → preview → apply → undo with attribution                        |
+| **5. Render**        | Compiler, multi-track output, audio, captions, export jobs, signed download                                           | Output duration and streams match the timeline when probed            |
+| **6. Advanced**      | B-roll, Shorts as independent timelines, reframing, advanced audio                                                    | Demo steps 7–11 end to end                                            |
+| **7. Hardening**     | Profiling, integration tests, security review, render validation                                                      | The full 15-step demo is the acceptance test                          |
 
 Each phase ends with: what was built, files changed, test results, what works, remaining limitations and the exact next step.

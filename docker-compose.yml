@@ -24,6 +24,26 @@ services:
       timeout: 5s
       retries: 20
 
+  storage:
+    image: chrislusf/seaweedfs:4.52
+    command: ['server', '-s3', '-s3.port=8333', '-dir=/data']
+    environment:
+      # Development-only credentials. Production values come from the environment.
+      AWS_ACCESS_KEY_ID: agent-edit-dev
+      AWS_SECRET_ACCESS_KEY: agent-edit-dev-secret
+    ports: ['127.0.0.1:8333:8333']
+    volumes: ['storage-data:/data']
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q -O /dev/null --server-response http://127.0.0.1:8333/ 2>&1 | grep -q "HTTP/"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
 volumes:
   mongo-data:
   redis-data:
+  storage-data:

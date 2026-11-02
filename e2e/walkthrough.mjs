@@ -62,6 +62,7 @@ await page.getByRole('heading', { name: 'Conference talk' }).waitFor();
 const projectUrl = page.url();
 ok('create navigates to project page', /\/projects\/prj_/.test(projectUrl), projectUrl);
 await shot('05-project');
+await page.getByRole('link', { name: 'Settings' }).click();
 
 await page.getByLabel('Name').fill('Conference talk v2');
 await page.getByRole('radio', { name: '60', exact: true }).check({ force: true });
@@ -97,6 +98,7 @@ ok(
 await shot('06-dashboard');
 
 await page.getByRole('link', { name: 'Podcast ep. 14' }).click();
+await page.getByRole('link', { name: 'Settings' }).click();
 await page.getByRole('button', { name: 'Delete project' }).click();
 await page.getByRole('button', { name: 'Keep project' }).click();
 ok(
@@ -121,6 +123,7 @@ for (const [n, u] of [
   ['08-mobile-dashboard', BASE],
   ['09-mobile-new', `${BASE}/projects/new`],
   ['10-mobile-project', projectUrl],
+  ['12-mobile-settings', `${projectUrl}/settings`],
 ]) {
   await mobile.goto(u);
   await mobile.waitForLoadState('networkidle');

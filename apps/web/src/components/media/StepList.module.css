@@ -1,0 +1,54 @@
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  gap: 5px;
+  padding-bottom: 3px;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.label {
+  color: var(--text-3);
+}
+
+.value {
+  color: var(--text-2);
+  font-family: var(--font-data);
+}
+
+.step[data-status='running'] .label,
+.step[data-status='running'] .value {
+  color: var(--accent);
+}
+
+.step[data-status='done'] .value {
+  color: var(--success);
+}
+
+.step[data-status='failed'] .label,
+.step[data-status='failed'] .value {
+  color: var(--danger);
+}
+
+.track {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform 300ms linear;
+}

@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { newId } from '@agent-edit/shared';
 import type { LoginRequest, RegisterRequest, User } from '@agent-edit/validation';
 import { AppError } from '../../errors.js';
-import type { Database, UserDoc } from '../../infra/mongo.js';
+import type { Database, UserDoc } from '@agent-edit/infra';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
 
 const DUPLICATE_KEY = 11000;
