@@ -1,0 +1,31 @@
+{
+  "name": "agent-edit",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "dev": "concurrently -n api,worker,web -c blue,magenta,green \"npm run dev -w @agent-edit/api\" \"npm run dev -w @agent-edit/worker\" \"npm run dev -w @agent-edit/web\"",
+    "build": "tsc -b && npm run build -w @agent-edit/web",
+    "typecheck": "tsc -b && tsc -p apps/web/tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:e2e": "node e2e/walkthrough.mjs",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "concurrently": "^9.2.1",
+    "playwright": "^1.60.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

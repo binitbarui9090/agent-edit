@@ -1,0 +1,101 @@
+.page {
+  width: 100%;
+  padding: 16px var(--gutter) 40px;
+}
+
+.crumbs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.crumbs a {
+  text-decoration: none;
+}
+
+.crumbs a:hover {
+  color: var(--text-1);
+}
+
+.crumbs span:last-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.title {
+  overflow-wrap: anywhere;
+  font-size: var(--text-xl);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  max-width: 460px;
+  margin-top: 18px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cancel {
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.cancel:hover {
+  color: var(--text-1);
+}
+
+.saved {
+  color: var(--success);
+  font-size: var(--text-sm);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 460px) minmax(0, 300px);
+  gap: 64px;
+}
+
+.danger {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.dangerTitle {
+  margin-bottom: 4px;
+  font-size: var(--text-md);
+  font-weight: 500;
+}
+
+.dangerText {
+  margin-bottom: 10px;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.side {
+  margin-top: 18px;
+}
+
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+
+  .side {
+    margin-top: 0;
+  }
+}
