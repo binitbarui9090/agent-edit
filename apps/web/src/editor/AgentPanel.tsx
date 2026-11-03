@@ -166,7 +166,7 @@ function RunCard({
             <li key={`${short.sourceMediaId}-${short.sourceIn}`}>
               {short.name}
               <span className={styles.stepReason}>
-                {short.framingSource === 'vision' ? 'Framed on the subject' : 'Centre framed'} ·{' '}
+                {short.framingSource === 'motion' ? 'Framed on the movement' : 'Centre framed'} ·{' '}
                 {short.captions.length} captions
               </span>
             </li>

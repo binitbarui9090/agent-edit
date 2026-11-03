@@ -174,6 +174,16 @@ export class AgentService {
       new Set(enabledSteps),
     );
 
+    // Compiling does not look at pictures, so framing measured when planning carries over.
+    compiled.shorts = compiled.shorts.map((short) => {
+      const known = doc.shorts.find(
+        (other) => other.sourceMediaId === short.sourceMediaId && other.sourceIn === short.sourceIn,
+      );
+      return known
+        ? { ...short, framing: known.framing, framingSource: known.framingSource }
+        : short;
+    });
+
     const newlyBroken = compiled.steps.filter(
       (step) => step.error && enabledSteps.includes(step.index) && !doc.steps[step.index]?.error,
     );

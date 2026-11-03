@@ -1,13 +1,16 @@
+import { rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
+  compilePlan,
   planWithModel,
   ruleBasedPlan,
-  compilePlan,
   type ProviderInfo,
 } from '@agent-edit/ai-engine';
 import { loadAgentContext, publishEvent, type AgentRunDoc } from '@agent-edit/infra';
+import { findActiveRegion } from '@agent-edit/media-engine';
 import { ticksToSeconds } from '@agent-edit/shared';
 import { clipEnd, timelineDuration } from '@agent-edit/timeline-engine';
-import type { AgentPlan } from '@agent-edit/validation';
+import type { AgentPlan, ShortProposal } from '@agent-edit/validation';
 import type { PipelineContext } from '../media/pipeline.js';
 
 const RULES_PROVIDER: ProviderInfo = { id: 'rules', model: null, isMock: false };
@@ -17,6 +20,46 @@ const RULES_PROVIDER: ProviderInfo = { id: 'rules', model: null, isMock: false }
  * against the real reducer. It writes a proposal and nothing else: only the creator's approval, in
  * the API, can change a timeline.
  */
+/**
+ * Frames each Short on where the movement is. A shot with no clear region stays centred and says so,
+ * and a Short should never fail over its crop.
+ */
+async function frameShorts(
+  ctx: PipelineContext,
+  shorts: ShortProposal[],
+): Promise<ShortProposal[]> {
+  const framed: ShortProposal[] = [];
+  for (const short of shorts) {
+    const media = await ctx.database.media.findOne({ _id: short.sourceMediaId });
+    if (!media?.storage.proxyKey) {
+      framed.push(short);
+      continue;
+    }
+    const scratch = await ctx.cache.scratch(media._id, 'framing');
+    try {
+      const proxy = join(scratch, 'proxy.mp4');
+      await ctx.storage.downloadToFile(media.storage.proxyKey, proxy, ctx.signal);
+      const position = await findActiveRegion(
+        ctx.binaries.ffmpeg,
+        proxy,
+        ticksToSeconds(short.sourceIn),
+        ticksToSeconds(short.sourceOut - short.sourceIn),
+        { signal: ctx.signal, tracker: ctx.tracker },
+      );
+      framed.push(
+        position === null ? short : { ...short, framing: position, framingSource: 'motion' },
+      );
+    } catch (err) {
+      if (ctx.signal.aborted) throw err;
+      ctx.log.warn({ err, mediaId: media._id }, 'could not measure framing, keeping centre crop');
+      framed.push(short);
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  }
+  return framed;
+}
+
 export async function processAgentRun(ctx: PipelineContext, runId: string): Promise<void> {
   const run = await ctx.database.agentRuns.findOne({ _id: runId });
   if (!run || run.status !== 'queued') return;
@@ -101,6 +144,10 @@ export async function processAgentRun(ctx: PipelineContext, runId: string): Prom
 
     await update({ stage: 'Checking the plan against the timeline' });
     const compiled = compilePlan(plan, timeline, context.compile, context.media);
+    if (compiled.shorts.length > 0) {
+      await update({ stage: 'Finding the subject in each Short' });
+      compiled.shorts = await frameShorts(ctx, compiled.shorts);
+    }
     if (context.compile.segments.length === 0) {
       warnings.push('This footage has no transcript, so speech-based edits cannot run.');
     }

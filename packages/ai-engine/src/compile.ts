@@ -70,8 +70,6 @@ export interface CompileContext {
   silences: readonly SourceRange[];
   moments: readonly HighlightMoment[];
   library: ReadonlyMap<string, LibraryItem>;
-  /** A horizontal position for a subject, when a vision model can give one. */
-  subjectFraming?: ((mediaId: string, time: number) => number | null) | undefined;
 }
 
 export interface CompiledPlan {
@@ -591,7 +589,6 @@ const generateShorts: Compiler = (_state, step, context) => {
   }
   const shorts: ShortProposal[] = chosen.map((moment, index) => {
     const end = Math.min(moment.end, moment.start + secondsToTicks(SHORT_MAX_SECONDS));
-    const framing = context.subjectFraming?.(moment.mediaId, (moment.start + end) / 2) ?? null;
     const captions = context.segments
       .filter((s) => s.mediaId === moment.mediaId && s.start < end && s.end > moment.start)
       .flatMap((segment) => captionChunks(segment))
@@ -602,8 +599,9 @@ const generateShorts: Compiler = (_state, step, context) => {
       sourceMediaId: moment.mediaId,
       sourceIn: moment.start,
       sourceOut: end,
-      framing: framing ?? 0,
-      framingSource: framing === null ? 'center' : 'vision',
+      // Filled in by the worker, which can measure the footage. Compiling stays pure.
+      framing: 0,
+      framingSource: 'center',
       captions,
     };
   });
@@ -864,8 +862,9 @@ export function buildShortOperations(
   const sourceAspect = source.width / source.height;
   const targetAspect = state.width / state.height;
   const scale = Math.max(sourceAspect / targetAspect, targetAspect / sourceAspect);
-  // How far the picture can slide before an edge shows, as a fraction of the frame width.
+  // Centres the subject, sliding no further than the point where an edge of the picture would show.
   const slack = (scale - 1) / 2;
+  const offset = Math.max(-slack, Math.min(slack, (-short.framing / 2) * scale));
   const clip = {
     ...createMediaClip(
       {
@@ -876,7 +875,7 @@ export function buildShortOperations(
       },
       state.frameRate,
     ),
-    transform: { x: -short.framing * slack, y: 0, scale, rotation: 0, opacity: 1 },
+    transform: { x: offset, y: 0, scale, rotation: 0, opacity: 1 },
   };
   const ops: TimelineOperation[] = [{ op: 'add_clip', trackId: video.id, clip }];
 

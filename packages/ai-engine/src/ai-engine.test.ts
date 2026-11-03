@@ -543,7 +543,7 @@ describe('Shorts', () => {
       sourceIn: 0,
       sourceOut: s(20),
       framing: 1,
-      framingSource: 'vision' as const,
+      framingSource: 'motion' as const,
       captions: [],
     };
     const ops = buildShortOperations(short, state, { width: 1920, height: 1080 });

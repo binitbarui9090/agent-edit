@@ -77,9 +77,9 @@ export const shortProposalSchema = z.object({
   sourceMediaId: idSchema(ID_PREFIXES.media),
   sourceIn: z.number(),
   sourceOut: z.number(),
-  /** Horizontal framing, from -1 (left edge) to 1 (right edge). 0 is centre. */
+  /** Where the subject sits across the source picture: -1 is its left edge, 1 its right. */
   framing: z.number().min(-1).max(1),
-  framingSource: z.enum(['center', 'vision']),
+  framingSource: z.enum(['center', 'motion']),
   captions: z.array(z.object({ start: z.number(), end: z.number(), text: z.string() })),
 });
 export type ShortProposal = z.infer<typeof shortProposalSchema>;

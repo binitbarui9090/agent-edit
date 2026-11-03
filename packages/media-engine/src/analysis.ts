@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { secondsToTicks } from '@agent-edit/shared';
 import { UNTRUSTED_INPUT_ARGS, runFfmpeg } from './ffmpeg.js';
 import type { ProcessTracker } from './process-tracker.js';
@@ -127,4 +128,81 @@ export async function extractFrame(
     ],
     { signal, tracker },
   );
+}
+
+const MOTION_WIDTH = 64;
+const MOTION_HEIGHT = 36;
+/** Frame differences below this are compression noise, not movement. */
+const MOTION_NOISE_FLOOR = 10;
+/** Too little change overall means a still shot, with nothing to go on. */
+const MIN_MOTION_ENERGY = 400;
+/** Evenly spread motion has a spread near 0.29. Well below that means it is concentrated somewhere. */
+const MAX_CONCENTRATED_SPREAD = 0.2;
+
+/** Where movement concentrates across the picture, or null if there is no clear region. */
+export function analyzeColumnMotion(columns: readonly number[]): number | null {
+  const total = columns.reduce((sum, value) => sum + value, 0);
+  if (total < MIN_MOTION_ENERGY) return null;
+  const position = (index: number) => (index + 0.5) / columns.length;
+  const center = columns.reduce((sum, value, i) => sum + value * position(i), 0) / total;
+  const variance =
+    columns.reduce((sum, value, i) => sum + value * (position(i) - center) ** 2, 0) / total;
+  if (Math.sqrt(variance) > MAX_CONCENTRATED_SPREAD) return null;
+  return Math.round((center - 0.5) * 2 * 1000) / 1000;
+}
+
+/**
+ * Measures where a shot moves, from -1 (left edge) to 1 (right edge). A speaker moves and a background
+ * does not, so this finds them with no model at all. It picks one position per shot: it does not track
+ * someone walking across the frame, and a moving camera reads as no clear region.
+ */
+export function findActiveRegion(
+  ffmpeg: string,
+  input: string,
+  fromSeconds: number,
+  lengthSeconds: number,
+  { signal, tracker }: Pick<AnalysisOptions, 'signal' | 'tracker'> = {},
+): Promise<number | null> {
+  return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
+    const child = spawn(
+      ffmpeg,
+      [
+        '-nostdin',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        ...UNTRUSTED_INPUT_ARGS,
+        '-ss',
+        fromSeconds.toFixed(3),
+        '-t',
+        lengthSeconds.toFixed(3),
+        '-i',
+        input,
+        '-an',
+        '-vf',
+        `fps=4,scale=${MOTION_WIDTH}:${MOTION_HEIGHT},format=gray,tblend=all_mode=difference`,
+        '-f',
+        'rawvideo',
+        '-pix_fmt',
+        'gray',
+        'pipe:1',
+      ],
+      { stdio: ['ignore', 'pipe', 'ignore'], shell: false, ...(signal ? { signal } : {}) },
+    );
+    tracker?.track(child, ffmpeg);
+    const columns = new Array<number>(MOTION_WIDTH).fill(0);
+    let offset = 0;
+    child.stdout.on('data', (chunk: Buffer) => {
+      for (const value of chunk) {
+        if (value > MOTION_NOISE_FLOOR) columns[offset % MOTION_WIDTH]! += value;
+        offset++;
+      }
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve(analyzeColumnMotion(columns));
+      else reject(new Error(`FFmpeg exited with code ${code}`));
+    });
+  });
 }

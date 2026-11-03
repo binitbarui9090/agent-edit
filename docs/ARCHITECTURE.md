@@ -253,7 +253,7 @@ Every capability sits behind a provider interface selected by environment variab
 | Vision summaries          | Ollama vision model, sampled frames                                  | Same LLM providers               | Follows LLM choice              |
 | Speaker segmentation      | pyannote (needs Python and a free HF token)                          | Bundled with Deepgram/AssemblyAI | Follows STT choice              |
 | B-roll source             | User's own uploads                                                   | Stock API, generative video      | User uploads first              |
-| Reframing                 | Local face detection (ONNX); centre crop fallback                    | None                             | Phase 6                         |
+| Reframing                 | FFmpeg motion measurement                                            | None                             | Phase 6, see below              |
 
 Infrastructure: MongoDB, Redis (`noeviction`, which BullMQ requires) and S3-compatible storage all run in local containers at no cost. Production hosting is a later decision and no paid service is introduced without asking.
 
@@ -262,6 +262,12 @@ Infrastructure: MongoDB, Redis (`noeviction`, which BullMQ requires) and S3-comp
 The model outputs a **plan**, never timeline edits. A deterministic compiler turns each step into exact operations using measured facts (silence ranges, repeated takes, word timings), and the reducer dry-runs every step. A small local model therefore produces a worse plan, not a corrupted timeline, and a step that cannot apply is reported on its own while the rest still work. Only the creator's approval in the API can commit anything, and it recompiles against the current timeline so newer edits are never overwritten.
 
 **Tested end to end on this Mac:** whisper.cpp `base.en` and Ollama `qwen3:8b`. The Claude and Deepgram adapters are tested against local stand-ins only, because no paid key was used. Speaker identification requires Deepgram: whisper.cpp does not provide it and the step says so.
+
+### Reframing
+
+Shorts are cropped to where movement concentrates, measured with FFmpeg across the clip. A speaker moves and a background does not, so this needs no model. A local vision model was tried first and rejected: shown a subject on the left and then the right, `gemma3:4b` answered "centre" both times, so it would have looked like reframing while doing nothing.
+
+It chooses one position per Short. It does not follow someone across the frame, and a moving camera or still shot stays centred, which the plan states. It is not face detection.
 
 ## 8. Phased development plan
 
@@ -272,7 +278,7 @@ The model outputs a **plan**, never timeline edits. A deterministic compiler tur
 | **3. Timeline** ✅   | `timeline-engine`, op log, multi-track editor, playback, undo/redo, versions                                          | Every gesture changes persisted state; 500-clip timeline stays smooth |
 | **4. AI** ✅         | Adapters, transcription, scenes, speakers, moments, planner, proposal flow                                            | Plan → preview → apply → undo with attribution                        |
 | **5. Render** ✅     | Compiler, multi-track output, audio, captions, export jobs, signed download                                           | Output duration and streams match the timeline when probed            |
-| **6. Advanced**      | B-roll, Shorts as independent timelines, reframing, advanced audio                                                    | Demo steps 7–11 end to end                                            |
+| **6. Advanced** ✅   | B-roll, Shorts as independent timelines, reframing, advanced audio                                                    | Demo steps 7–11 end to end                                            |
 | **7. Hardening**     | Profiling, integration tests, security review, render validation                                                      | The full 15-step demo is the acceptance test                          |
 
 Each phase ends with: what was built, files changed, test results, what works, remaining limitations and the exact next step.

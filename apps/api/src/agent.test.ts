@@ -453,6 +453,39 @@ describe('Shorts', () => {
   });
 });
 
+describe('Short framing', () => {
+  it('keeps the framing measured when planning through the recompile on apply', async () => {
+    const actor = await newActor();
+    const run = await propose(actor, planOf({ operation: 'generate_shorts', count: 1 }));
+    await database.agentRuns.updateOne(
+      { _id: run.id },
+      {
+        $set: {
+          shorts: [
+            {
+              name: 'x',
+              reason: 'x',
+              sourceMediaId: actor.mediaId,
+              sourceIn: s(50),
+              sourceOut: s(75),
+              framing: 1,
+              framingSource: 'motion',
+              captions: [],
+            },
+          ],
+        },
+      },
+    );
+    const { createdTimelineIds } = (await apply(actor, run, [0])).json();
+    const short = (
+      await call(actor, 'GET', `/timelines/${createdTimelineIds[0]}`)
+    ).json() as Timeline;
+    const clip = video(short)[0]!;
+    expect(clip.transform.x).toBeLessThan(0);
+    expect(Math.abs(clip.transform.x)).toBeCloseTo((clip.transform.scale - 1) / 2, 5);
+  });
+});
+
 describe('rejecting and ownership', () => {
   it('reject changes nothing and closes the run', async () => {
     const actor = await newActor();
