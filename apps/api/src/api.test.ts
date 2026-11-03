@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { newId } from '@agent-edit/shared';
 import type { FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
@@ -297,7 +300,63 @@ describe('projects', () => {
   });
 });
 
+describe('serving the web app', () => {
+  let site: FastifyInstance;
+  let root: string;
+
+  beforeAll(async () => {
+    root = mkdtempSync(join(tmpdir(), 'ae-site-'));
+    writeFileSync(join(root, 'index.html'), '<title>Agent Edit</title>');
+    writeFileSync(join(root, 'app.js'), 'console.log(1)');
+    writeFileSync(join(dirname(root), 'secret.txt'), 'private');
+    site = await buildApp({
+      config: { ...config, WEB_DIST: root },
+      database,
+      redis,
+      storage,
+      queues,
+    });
+    await site.ready();
+  });
+
+  afterAll(async () => {
+    await site.close();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('serves files, and the app for any client-side route', async () => {
+    expect((await site.inject({ url: '/app.js' })).body).toContain('console.log');
+    const page = await site.inject({ url: '/projects/prj_x/edit' });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('Agent Edit');
+    expect(page.headers['content-security-policy']).toContain("script-src 'self'");
+  });
+
+  it('keeps API errors as JSON errors, not the app', async () => {
+    const res = await site.inject({ url: '/api/v1/nope' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('not_found');
+    expect((await site.inject({ method: 'POST', url: '/projects/x' })).statusCode).toBe(404);
+  });
+
+  it('never serves anything outside its folder', async () => {
+    for (const url of ['/../secret.txt', '/%2e%2e/secret.txt', '/..%2fsecret.txt']) {
+      const res = await site.inject({ url });
+      expect(res.body, url).not.toContain('private');
+    }
+  });
+});
+
 describe('platform', () => {
+  it('sends a content security policy that allows storage and nothing unexpected', async () => {
+    const res = await app.inject({ url: '/health/live' });
+    const policy = String(res.headers['content-security-policy']);
+    expect(policy).toContain("script-src 'self'");
+    expect(policy).toContain("media-src 'self' http://127.0.0.1:8333");
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(policy).not.toMatch(/script-src[^;]*unsafe-inline/);
+  });
+
   it('keeps serving and reports the truth when Redis is unreachable', async () => {
     const deadRedis = createRedis('redis://127.0.0.1:1');
     const degraded = await buildApp({ config, database, redis: deadRedis, storage, queues });

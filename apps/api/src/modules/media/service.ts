@@ -40,6 +40,7 @@ export interface MediaServiceDeps {
   redis: Redis;
   projects: ProjectService;
   maxUploadBytes: number;
+  maxStorageBytesPerUser: number;
 }
 
 export class MediaService {
@@ -49,6 +50,7 @@ export class MediaService {
   private readonly redis: Redis;
   private readonly projects: ProjectService;
   private readonly maxUploadBytes: number;
+  private readonly maxStorageBytesPerUser: number;
 
   constructor(deps: MediaServiceDeps) {
     this.database = deps.database;
@@ -57,6 +59,7 @@ export class MediaService {
     this.redis = deps.redis;
     this.projects = deps.projects;
     this.maxUploadBytes = deps.maxUploadBytes;
+    this.maxStorageBytesPerUser = deps.maxStorageBytesPerUser;
   }
 
   private async loadJobs(mediaIds: string[]): Promise<Map<string, AnalysisJobDoc[]>> {
@@ -148,6 +151,17 @@ export class MediaService {
       deletedAt: null,
     });
     if (existing) return this.uploadState(existing, true);
+
+    // Checked only for a new upload: a resumed one is already counted.
+    const [usage] = await this.database.media
+      .aggregate<{ total: number }>([
+        { $match: { ownerId, deletedAt: null } },
+        { $group: { _id: null, total: { $sum: '$size' } } },
+      ])
+      .toArray();
+    if ((usage?.total ?? 0) + input.size > this.maxStorageBytesPerUser) {
+      throw new AppError('file_too_large', 'This file would go over your storage limit');
+    }
 
     const now = new Date();
     const mediaId = newId('med');

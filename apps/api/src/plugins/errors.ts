@@ -15,9 +15,12 @@ function body(
   };
 }
 
-export const errorsPlugin = fp(async (app: FastifyInstance) => {
+export const errorsPlugin = fp(async (app: FastifyInstance, opts: { spaFallback: boolean }) => {
   app.setNotFoundHandler((req, reply) => {
-    void reply.status(404).send(body(req, 'not_found', 'Route not found'));
+    // Any page the server does not know belongs to the client-side router. Real API paths stay errors.
+    const isApi = req.url.startsWith('/api/') || req.url.startsWith('/health');
+    if (opts.spaFallback && req.method === 'GET' && !isApi) return reply.sendFile('index.html');
+    return reply.status(404).send(body(req, 'not_found', 'Route not found'));
   });
 
   app.setErrorHandler((err: FastifyError | AppError | ZodError, req, reply) => {

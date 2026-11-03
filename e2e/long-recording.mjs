@@ -3,9 +3,11 @@
 // Usage: npm run test:long -- <path to file>, or omit the path to generate one in the temp directory.
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { chromium } from 'playwright';
 
@@ -126,6 +128,7 @@ await page.getByRole('button', { name: 'Create account' }).click();
 await page.getByRole('heading', { name: 'Projects' }).waitFor();
 await page.goto(`${BASE}/projects/new`);
 await page.getByLabel('Name', { exact: true }).fill('Three hour recording');
+await page.getByRole('radio', { name: '720p' }).check({ force: true });
 await page.getByRole('button', { name: 'Create project' }).click();
 await page.getByText('Choose files').waitFor();
 const projectId = page.url().split('/projects/')[1];
@@ -302,6 +305,168 @@ ok(
   peaks.worker * 1024 < fileSize / 4,
   mb(peaks.worker),
 );
+
+// --- Rendering at scale ---
+const api = (path, init) =>
+  page.evaluate(
+    async ([url, options]) => (await fetch(url, options)).json(),
+    [`/api/v1/projects/${projectId}${path}`, init],
+  );
+const post = (path, body) =>
+  api(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+const TICKS = 705_600_000;
+const FRAME = TICKS / 30;
+const FFPROBE = process.env.FFPROBE_PATH ?? 'ffprobe';
+
+function ffmpegMemory() {
+  const out = execFileSync('ps', ['-axo', 'rss=,command='], {
+    maxBuffer: 16 * 1024 * 1024,
+  }).toString();
+  let total = 0;
+  let count = 0;
+  for (const line of out.split('\n')) {
+    if (!/ffmpeg .*chunk-/.test(line)) continue;
+    total += Number(line.trim().split(/\s+/)[0]);
+    count++;
+  }
+  return { total, count };
+}
+
+async function exportAndCheck(label, timeline, expectedFrames, limitMs) {
+  const begun = Date.now();
+  const job = await post(`/timelines/${timeline.id}/renders`, {
+    preset: 'source',
+    burnCaptions: false,
+    baseRevision: timeline.revision,
+  });
+  if (!job.id) throw new Error(`Export refused: ${JSON.stringify(job)}`);
+  let peak = 0;
+  let current;
+  for (;;) {
+    current = await api(`/renders/${job.id}`);
+    peak = Math.max(peak, ffmpegMemory().total);
+    if (['done', 'failed', 'cancelled'].includes(current.status)) break;
+    if (Date.now() - begun > limitMs) throw new Error(`${label} took too long`);
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+  const minutes = (Date.now() - begun) / 60000;
+  ok(`${label}: export finished`, current.status === 'done', current.error ?? '');
+  log(
+    `${label}: ${minutes.toFixed(1)} min, FFmpeg peak ${mb(peak)}, file ${gb(current.outputSize ?? 0)}`,
+  );
+  if (current.status !== 'done') return null;
+  const file = join(tmpdir(), `agent-edit-${job.id}.mp4`);
+  const response = await fetch(current.downloadUrl);
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(file));
+  const packets = Number(
+    execFileSync(FFPROBE, [
+      '-v',
+      'error',
+      '-select_streams',
+      'v:0',
+      '-count_packets',
+      '-show_entries',
+      'stream=nb_read_packets',
+      '-of',
+      'csv=p=0',
+      file,
+    ])
+      .toString()
+      .trim()
+      .replace(/,$/, ''),
+  );
+  ok(
+    `${label}: exactly the timeline's frames`,
+    packets === expectedFrames,
+    `${packets} of ${expectedFrames}`,
+  );
+  rmSync(file, { force: true });
+  return { peak, minutes };
+}
+
+const main = await api('/timelines/main');
+const trackId = main.tracks.find((t) => t.type === 'VIDEO').id;
+const CLIPS = 500;
+const CLIP_FRAMES = 60;
+const sourceSpan = 10_700 * TICKS;
+const many = [];
+for (let i = 0; i < CLIPS; i++) {
+  // Spread across the whole recording, the worst case: every clip is a seek somewhere new.
+  const sourceIn = Math.floor(((((i * 7919) % CLIPS) / CLIPS) * sourceSpan) / FRAME) * FRAME;
+  many.push({
+    op: 'add_clip',
+    trackId,
+    clip: {
+      id: `clip_${String(i).padStart(22, '0')}`,
+      kind: 'media',
+      sourceMediaId: media.id,
+      sourceIn,
+      sourceOut: sourceIn + CLIP_FRAMES * FRAME,
+      start: i * CLIP_FRAMES * FRAME,
+      duration: CLIP_FRAMES * FRAME,
+      speed: 1,
+      volume: 1,
+      enabled: true,
+      transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      audio: { normalize: false, denoise: false, fadeIn: 0, fadeOut: 0 },
+      transitionIn: null,
+      transitionOut: null,
+    },
+  });
+}
+const edited = await post(`/timelines/${main.id}/transactions`, {
+  baseRevision: main.revision,
+  idempotencyKey: crypto.randomUUID(),
+  ops: many,
+  summary: 'Scale test',
+});
+if (!edited.timeline) throw new Error(`Could not build the edit: ${JSON.stringify(edited.error)}`);
+const manyClips = await exportAndCheck(
+  '500-clip edit',
+  edited.timeline,
+  CLIPS * CLIP_FRAMES,
+  60 * 60 * 1000,
+);
+
+const cleared = await post(`/timelines/${main.id}/transactions`, {
+  baseRevision: edited.timeline.revision,
+  idempotencyKey: crypto.randomUUID(),
+  ops: [
+    ...many.map((op) => ({ op: 'remove_clip', clipId: op.clip.id })),
+    {
+      op: 'add_clip',
+      trackId,
+      clip: {
+        ...many[0].clip,
+        id: `clip_${'1'.repeat(22)}`,
+        sourceIn: 0,
+        sourceOut: 10_800 * TICKS,
+        start: 0,
+        duration: 10_800 * TICKS,
+      },
+    },
+  ],
+  summary: 'Whole recording',
+});
+if (!cleared.timeline)
+  throw new Error(`Could not build the edit: ${JSON.stringify(cleared.error)}`);
+const whole = await exportAndCheck(
+  'Full 3-hour export',
+  cleared.timeline,
+  10_800 * 30,
+  4 * 60 * 60 * 1000,
+);
+if (manyClips && whole) {
+  ok(
+    'memory does not grow with clip count or length',
+    Math.max(manyClips.peak, whole.peak) < 2 * 1024 * 1024,
+    `${mb(manyClips.peak)} and ${mb(whole.peak)}`,
+  );
+}
 
 await browser.close();
 if (replacement) replacement.kill('SIGTERM');

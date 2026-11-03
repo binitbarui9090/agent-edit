@@ -1,0 +1,70 @@
+# A starting point for self-hosting. Put TLS in front of the API and keep everything else private.
+# Copy .env.example to .env.production and replace every development credential first, then:
+#   docker compose -f compose.production.yml --env-file .env.production up -d --build
+# Set NODE_ENV=production, WEB_ORIGIN to the public address, S3_ENDPOINT=http://storage:8333, and
+# S3_PUBLIC_ENDPOINT to the address browsers reach storage at.
+name: agent-edit-production
+
+services:
+  api:
+    build: { context: ., target: api }
+    env_file: .env.production
+    environment:
+      API_HOST: 0.0.0.0
+      NODE_ENV: production
+      MONGO_URL: mongodb://mongo:27017
+      REDIS_URL: redis://redis:6379
+    ports: ['127.0.0.1:4000:4000']
+    depends_on: [mongo, redis, storage]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped
+
+  worker:
+    build: { context: ., target: worker }
+    env_file: .env.production
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      REDIS_URL: redis://redis:6379
+    depends_on: [mongo, redis, storage]
+    volumes: ['work:/work']
+    tmpfs: ['/tmp']
+    # Uploaded media is hostile until proven otherwise, and FFmpeg parses all of it. If it is ever
+    # compromised, it should find no privileges, a read-only disk and bounded resources.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    pids_limit: 512
+    # Set these for the host. A limit above what the machine has stops the container from starting.
+    mem_limit: ${WORKER_MEMORY:-4g}
+    cpus: ${WORKER_CPUS:-2}
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:8
+    volumes: ['mongo-data:/data/db']
+    restart: unless-stopped
+
+  redis:
+    image: redis:8
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes: ['redis-data:/data']
+    restart: unless-stopped
+
+  storage:
+    image: chrislusf/seaweedfs:4.52
+    command: ['server', '-s3', '-s3.port=8333', '-dir=/data']
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+    # Browsers upload and play directly from here, so this must be reachable at S3_PUBLIC_ENDPOINT.
+    ports: ['127.0.0.1:8333:8333']
+    volumes: ['storage-data:/data']
+    restart: unless-stopped
+
+volumes:
+  work:
+  mongo-data:
+  redis-data:
+  storage-data:

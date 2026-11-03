@@ -453,6 +453,90 @@ describe('Shorts', () => {
   });
 });
 
+describe('limits', () => {
+  it('stops one user queueing unlimited plans', async () => {
+    const actor = await newActor();
+    const path = `/timelines/${actor.timeline.id}/agent-runs`;
+    for (let i = 0; i < 5; i++) {
+      expect((await call(actor, 'POST', path, { instruction: 'x' })).statusCode).toBe(201);
+    }
+    const refused = await call(actor, 'POST', path, { instruction: 'x' });
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json().error.code).toBe('rate_limited');
+    // Someone else is unaffected.
+    const other = await newActor();
+    const theirs = await call(other, 'POST', `/timelines/${other.timeline.id}/agent-runs`, {
+      instruction: 'x',
+    });
+    expect(theirs.statusCode).toBe(201);
+  });
+
+  it('stops one user queueing unlimited exports, until one finishes', async () => {
+    const actor = await newActor();
+    const body = () => ({
+      preset: 'source',
+      burnCaptions: false,
+      baseRevision: actor.timeline.revision,
+    });
+    const path = `/timelines/${actor.timeline.id}/renders`;
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const res = await call(actor, 'POST', path, body());
+      expect(res.statusCode).toBe(201);
+      ids.push(res.json().id);
+    }
+    expect((await call(actor, 'POST', path, body())).statusCode).toBe(429);
+    expect((await call(actor, 'POST', `/renders/${ids[0]}/cancel`)).statusCode).toBe(200);
+    expect((await call(actor, 'POST', path, body())).statusCode).toBe(201);
+  });
+
+  it('refuses to export an edit newer than the one the creator saw', async () => {
+    const actor = await newActor();
+    const res = await call(actor, 'POST', `/timelines/${actor.timeline.id}/renders`, {
+      preset: 'source',
+      burnCaptions: false,
+      baseRevision: 0,
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('revision_conflict');
+  });
+
+  it('hides exports from other users', async () => {
+    const owner = await newActor();
+    const intruder = await newActor();
+    const { id } = (
+      await call(owner, 'POST', `/timelines/${owner.timeline.id}/renders`, {
+        preset: 'source',
+        burnCaptions: false,
+        baseRevision: owner.timeline.revision,
+      })
+    ).json();
+    for (const actor of [{ ...intruder, projectId: owner.projectId }, intruder]) {
+      const attempts = await Promise.all([
+        call(actor, 'GET', `/renders/${id}`),
+        call(actor, 'POST', `/renders/${id}/cancel`),
+        call(actor, 'POST', `/renders/${id}/retry`),
+        call(actor, 'GET', `/timelines/${owner.timeline.id}/captions.srt`),
+      ]);
+      for (const res of attempts) expect(res.statusCode).toBe(404);
+    }
+    const mine = await app.inject({ url: '/api/v1/renders', headers: { cookie: intruder.cookie } });
+    expect(mine.json().items).toEqual([]);
+  });
+
+  it('never returns the timeline snapshot in export listings', async () => {
+    const actor = await newActor();
+    await call(actor, 'POST', `/timelines/${actor.timeline.id}/renders`, {
+      preset: 'source',
+      burnCaptions: false,
+      baseRevision: actor.timeline.revision,
+    });
+    const listed = (await call(actor, 'GET', '/renders')).json().items[0];
+    expect(listed).not.toHaveProperty('snapshot');
+    expect(listed).not.toHaveProperty('ownerId');
+  });
+});
+
 describe('Short framing', () => {
   it('keeps the framing measured when planning through the recompile on apply', async () => {
     const actor = await newActor();

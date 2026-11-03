@@ -50,6 +50,9 @@ const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } })
 const page = await ctx.newPage();
 const problems = [];
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+page.on('console', (m) => {
+  if (m.type() === 'error' && /Content Security Policy/.test(m.text())) problems.push(m.text());
+});
 page.on('dialog', (d) => d.accept());
 const ok = (label, cond, extra = '') => {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${label} ${extra}`);

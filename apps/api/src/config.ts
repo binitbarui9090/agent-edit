@@ -17,6 +17,15 @@ const envSchema = storageEnvSchema.extend({
     .int()
     .positive()
     .default(200 * 1024 ** 3),
+  MAX_STORAGE_BYTES_PER_USER: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(1024 ** 4),
+  MAX_ACTIVE_RENDERS_PER_USER: z.coerce.number().int().positive().default(3),
+  MAX_ACTIVE_AGENT_RUNS_PER_USER: z.coerce.number().int().positive().default(5),
+  /** A built web app to serve from this process. Otherwise the API serves only itself. */
+  WEB_DIST: z.string().optional(),
   RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().positive().default(600),
   RATE_LIMIT_AUTH_PER_MINUTE: z.coerce.number().int().positive().default(10),
 });

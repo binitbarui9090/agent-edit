@@ -161,6 +161,39 @@ describe('upload validation', () => {
   });
 });
 
+describe('storage quota', () => {
+  it('refuses an upload that would go over the limit, counting everything the user holds', async () => {
+    const limited = await buildApp({
+      config: {
+        ...config,
+        MONGO_DB: `${DB_NAME}:quota`,
+        MAX_STORAGE_BYTES_PER_USER: FILE_SIZE * 2,
+      },
+      database,
+      redis,
+      storage,
+      queues,
+    });
+    await limited.ready();
+    const original = app;
+    app = limited;
+    try {
+      const actor = await newActor();
+      const first = fingerprint();
+      expect((await initUpload(actor, { fingerprint: first })).statusCode).toBe(201);
+      expect((await initUpload(actor)).statusCode).toBe(201);
+      const refused = await initUpload(actor);
+      expect(refused.statusCode).toBe(413);
+      expect(refused.json().error.message).toContain('storage limit');
+      // Resuming something already counted must still work.
+      expect((await initUpload(actor, { fingerprint: first })).statusCode).toBe(200);
+    } finally {
+      app = original;
+      await limited.close();
+    }
+  });
+});
+
 describe('resumable upload', () => {
   it('resumes by fingerprint and reports only the parts storage really has', async () => {
     const actor = await newActor();

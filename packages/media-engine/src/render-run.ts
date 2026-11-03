@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { TICKS_PER_SECOND } from '@agent-edit/shared';
 import type { MediaClip, TimelineState } from '@agent-edit/validation';
-import { runFfmpeg } from './ffmpeg.js';
+import { UNTRUSTED_INPUT_ARGS, runFfmpeg } from './ffmpeg.js';
 import type { ProcessTracker } from './process-tracker.js';
 import {
   buildAssSubtitles,
@@ -41,6 +41,7 @@ export async function measureLoudness(
   await runFfmpeg(
     ffmpeg,
     [
+      ...UNTRUSTED_INPUT_ARGS,
       '-ss',
       fromSeconds.toFixed(6),
       '-t',

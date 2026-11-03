@@ -317,11 +317,13 @@ async function ensureIndexes({
     transactions.createIndex({ timelineId: 1, idempotencyKey: 1 }, { unique: true }),
     versions.createIndex({ timelineId: 1, createdAt: -1 }),
     segments.createIndex({ mediaId: 1, start: 1 }),
-    segments.createIndex({ text: 'text' }),
     scenes.createIndex({ mediaId: 1, start: 1 }),
     moments.createIndex({ mediaId: 1, kind: 1, start: 1 }),
     agentRuns.createIndex({ timelineId: 1, createdAt: -1 }),
     renders.createIndex({ projectId: 1, createdAt: -1 }),
     renders.createIndex({ ownerId: 1, createdAt: -1 }),
+    renders.createIndex({ ownerId: 1, status: 1 }),
+    agentRuns.createIndex({ ownerId: 1, status: 1 }),
+    media.createIndex({ ownerId: 1, deletedAt: 1 }),
   ]);
 }

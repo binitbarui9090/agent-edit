@@ -1,4 +1,5 @@
 import { TICKS_PER_SECOND, ticksPerFrame } from '@agent-edit/shared';
+import { UNTRUSTED_INPUT_ARGS } from './ffmpeg.js';
 import { clipEnd, timelineCaptions, timelineDuration } from '@agent-edit/timeline-engine';
 import type { MediaClip, TimelineState, TrackType } from '@agent-edit/validation';
 
@@ -244,6 +245,7 @@ export function buildChunkCommand(state: TimelineState, options: ChunkCommandOpt
     const sourceFrom = clip.sourceIn + (sliceStart - clip.start) * clip.speed;
     const sourceLength = (sliceEnd - sliceStart) * clip.speed;
     inputs.push(
+      ...UNTRUSTED_INPUT_ARGS,
       '-ss',
       seconds(sourceFrom),
       '-t',

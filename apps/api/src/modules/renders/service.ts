@@ -25,6 +25,7 @@ export interface RenderServiceDeps {
   storage: Storage;
   projects: ProjectService;
   timelines: TimelineService;
+  maxActivePerUser: number;
 }
 
 function evenSize(width: number, height: number) {
@@ -39,8 +40,10 @@ export class RenderService {
   private readonly storage: Storage;
   private readonly projects: ProjectService;
   private readonly timelines: TimelineService;
+  private readonly maxActivePerUser: number;
 
   constructor(deps: RenderServiceDeps) {
+    this.maxActivePerUser = deps.maxActivePerUser;
     this.database = deps.database;
     this.redis = deps.redis;
     this.queues = deps.queues;
@@ -102,6 +105,18 @@ export class RenderService {
     }
     const duration = timelineDuration(timeline);
     if (duration === 0) throw new AppError('conflict', 'This timeline is empty');
+
+    // Rendering is the most expensive thing a user can ask for, so it is limited per person.
+    const active = await this.database.renders.countDocuments({
+      ownerId,
+      status: { $in: ['queued', 'running'] },
+    });
+    if (active >= this.maxActivePerUser) {
+      throw new AppError(
+        'rate_limited',
+        `You already have ${active} exports running. Wait for one to finish, or cancel one.`,
+      );
+    }
 
     const preset = RENDER_PRESETS[options.preset];
     const size = evenSize(preset.width ?? timeline.width, preset.height ?? timeline.height);

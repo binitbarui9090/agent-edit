@@ -101,6 +101,9 @@ const ctx = await browser.newContext({
 const page = await ctx.newPage();
 const problems = [];
 page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+page.on('console', (m) => {
+  if (m.type() === 'error' && /Content Security Policy/.test(m.text())) problems.push(m.text());
+});
 const ok = (label, cond, extra = '') => {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${label} ${extra}`);
   if (!cond) process.exitCode = 1;

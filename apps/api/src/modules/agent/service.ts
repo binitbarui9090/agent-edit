@@ -39,6 +39,7 @@ export interface AgentServiceDeps {
   queues: MediaQueues;
   projects: ProjectService;
   timelines: TimelineService;
+  maxActivePerUser: number;
 }
 
 /**
@@ -51,8 +52,10 @@ export class AgentService {
   private readonly queues: MediaQueues;
   private readonly projects: ProjectService;
   private readonly timelines: TimelineService;
+  private readonly maxActivePerUser: number;
 
   constructor(deps: AgentServiceDeps) {
+    this.maxActivePerUser = deps.maxActivePerUser;
     this.database = deps.database;
     this.redis = deps.redis;
     this.queues = deps.queues;
@@ -76,6 +79,13 @@ export class AgentService {
     instruction: string,
   ): Promise<AgentRun> {
     const timeline = await this.timelines.get(ownerId, projectId, timelineId);
+    const active = await this.database.agentRuns.countDocuments({
+      ownerId,
+      status: { $in: ['queued', 'planning'] },
+    });
+    if (active >= this.maxActivePerUser) {
+      throw new AppError('rate_limited', 'The agent is still working on your earlier requests');
+    }
     const now = new Date();
     const doc: AgentRunDoc = {
       _id: newId('run'),
