@@ -363,7 +363,7 @@ function ClipFields({ clip }: { clip: TimelineClip }) {
                           value === 'none'
                             ? null
                             : {
-                                type: value as 'crossfade' | 'fade_black',
+                                type: 'fade_black',
                                 duration: snapToFrame(secondsToTicks(0.5), rate),
                               },
                       },
@@ -373,7 +373,6 @@ function ClipFields({ clip }: { clip: TimelineClip }) {
                 >
                   <option value="none">None</option>
                   <option value="fade_black">Fade from/to black</option>
-                  <option value="crossfade">Crossfade</option>
                 </select>
               </label>
             );

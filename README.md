@@ -2,11 +2,11 @@
 
 An AI-native video editor. Upload raw footage, describe the edit, and review an agent's proposal as real, reversible operations on a multi-track timeline. The creator always has the final say.
 
-**Status: Phase 4 of 7 (AI).** Accounts, projects, resumable uploads, background processing, the media library, the multi-track editor and the editing agent work. Rendering is not built yet, and the UI says so rather than showing dead controls. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**Status: Phase 5 of 7 (render).** Accounts, projects, resumable uploads, background processing, the media library, the multi-track editor, the editing agent and video export work. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Run it
 
-Requires Node 22.12+, Docker (Colima or Docker Desktop) and FFmpeg (`brew install ffmpeg`).
+Requires Node 22.12+, Docker (Colima or Docker Desktop) and FFmpeg with libass, which captions need (`brew install ffmpeg-full`, then set `FFMPEG_PATH` and `FFPROBE_PATH` from `.env.example`).
 
 ```sh
 npm install

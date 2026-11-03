@@ -12,6 +12,7 @@ const FREE_SPACE_MARGIN = 2;
  */
 export class SourceCache {
   private readonly inflight = new Map<string, Promise<string>>();
+  private readonly pins = new Map<string, number>();
 
   constructor(
     private readonly storage: Storage,
@@ -65,7 +66,23 @@ export class SourceCache {
     return mkdtemp(join(directory, `${step}-`));
   }
 
+  /** Keeps a source through a render, even if its analysis finishes and tries to release it. */
+  pin(mediaId: string): void {
+    this.pins.set(mediaId, (this.pins.get(mediaId) ?? 0) + 1);
+  }
+
+  async unpin(mediaId: string): Promise<void> {
+    const count = (this.pins.get(mediaId) ?? 1) - 1;
+    if (count > 0) {
+      this.pins.set(mediaId, count);
+      return;
+    }
+    this.pins.delete(mediaId);
+    await rm(this.directory(mediaId), { recursive: true, force: true });
+  }
+
   async release(mediaId: string): Promise<void> {
+    if (this.pins.has(mediaId)) return;
     await rm(this.directory(mediaId), { recursive: true, force: true });
   }
 }

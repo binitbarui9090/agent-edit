@@ -151,6 +151,7 @@ beforeAll(async () => {
     mediaConcurrency: 3,
     proxyConcurrency: 1,
     analysisConcurrency: 1,
+    renderConcurrency: 1,
     workDir,
   });
 });
@@ -163,6 +164,7 @@ afterAll(async () => {
     QUEUES.proxy,
     QUEUES.analysis,
     QUEUES.agent,
+    QUEUES.render,
     QUEUES.maintenance,
   ]) {
     const handle = new Queue(queue, { connection: redis, prefix });

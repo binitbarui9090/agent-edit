@@ -2,12 +2,12 @@ import { frameRateLabel } from '@agent-edit/shared';
 import type { ProjectMediaSummary } from '@agent-edit/validation';
 import { Link } from 'react-router';
 import { useProjects } from '../api/projects';
+import { useRecentRenders } from '../api/renders';
 import { Button, ButtonLink } from '../components/Button';
 import { FormError } from '../components/Field';
 import { FormatFrame } from '../components/FormatFrame';
-import { Pending } from '../components/Pending';
 import { errorMessage } from '../lib/form-errors';
-import { formatAbsoluteTime, formatRelativeTime } from '../lib/format';
+import { formatAbsoluteTime, formatBytes, formatRelativeTime } from '../lib/format';
 import styles from './DashboardPage.module.css';
 
 function footageSummary({ total, processing, uploading, failed }: ProjectMediaSummary): string {
@@ -23,6 +23,7 @@ function footageSummary({ total, processing, uploading, failed }: ProjectMediaSu
 
 export function DashboardPage() {
   const query = useProjects();
+  const exports = useRecentRenders();
   const projects = query.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
@@ -114,17 +115,38 @@ export function DashboardPage() {
         )}
       </section>
 
-      <aside className={styles.side}>
-        <Pending
-          title="Not built yet"
-          items={[
-            {
-              name: 'Export history',
-              phase: 5,
-              detail: 'Listed here once rendering exists.',
-            },
-          ]}
-        />
+      <aside className={styles.side} aria-label="Export history">
+        <h2 className={styles.sideTitle}>Exports</h2>
+        <FormError message={errorMessage(exports.error)} />
+        {exports.isSuccess && exports.data.items.length === 0 && (
+          <p className={styles.sideEmpty}>Finished exports appear here.</p>
+        )}
+        <ul>
+          {exports.data?.items.map((job) => (
+            <li key={job.id} className={styles.export}>
+              <span className={styles.exportName}>{job.projectName}</span>
+              <span className={styles.exportMeta}>
+                {job.timelineName} · {formatRelativeTime(job.createdAt)}
+              </span>
+              {job.status === 'done' && job.downloadUrl ? (
+                <a className={styles.exportLink} href={job.downloadUrl} download>
+                  Download
+                  {job.outputSize !== null && ` (${formatBytes(job.outputSize)})`}
+                </a>
+              ) : (
+                <span className={styles.exportMeta} data-status={job.status}>
+                  {job.status === 'running'
+                    ? `Rendering ${Math.round(job.progress * 100)}%`
+                    : job.status === 'queued'
+                      ? 'Waiting'
+                      : job.status === 'failed'
+                        ? 'Failed'
+                        : 'Cancelled'}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
       </aside>
     </div>
   );

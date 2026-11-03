@@ -14,6 +14,7 @@ import {
   ListObjectsV2Command,
   ListPartsCommand,
   PutBucketCorsCommand,
+  PutObjectCommand,
   S3Client,
   UploadPartCommand,
   type S3ClientConfig,
@@ -58,6 +59,10 @@ export function originalKey(projectId: string, mediaId: string): string {
 
 export function derivedKey(projectId: string, mediaId: string, file: string): string {
   return `derived/${projectId}/${mediaId}/${file}`;
+}
+
+export function renderKey(projectId: string, renderId: string, file: string): string {
+  return `renders/${projectId}/${renderId}/${file}`;
 }
 
 export function mediaPrefixes(projectId: string, mediaId: string): string[] {
@@ -208,6 +213,26 @@ export class Storage {
       expiresIn: READ_URL_TTL_SECONDS,
       signingDate: new Date(Math.floor(now / SIGN_WINDOW_MS) * SIGN_WINDOW_MS),
     });
+  }
+
+  /** A link that downloads rather than plays. The name is restricted, since it comes from a user. */
+  signDownload(key: string, fileName: string): Promise<string> {
+    const safe = fileName.replace(/[^\w. -]+/g, '_').slice(0, 120) || 'download';
+    return getSignedUrl(
+      this.signer,
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ResponseContentDisposition: `attachment; filename="${safe}"`,
+      }),
+      { expiresIn: READ_URL_TTL_SECONDS },
+    );
+  }
+
+  async uploadText(key: string, body: string, contentType: string): Promise<void> {
+    await this.s3.send(
+      new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }),
+    );
   }
 
   async downloadToFile(key: string, path: string, signal?: AbortSignal): Promise<void> {

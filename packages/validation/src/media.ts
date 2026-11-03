@@ -128,6 +128,13 @@ export const serverEventSchema = z.discriminatedUnion('type', [
     mediaId: mediaIdSchema,
   }),
   z.object({
+    type: z.literal('render.changed'),
+    projectId: idSchema(ID_PREFIXES.project),
+    renderId: idSchema(ID_PREFIXES.renderJob),
+    status: z.enum(['queued', 'running', 'done', 'failed', 'cancelled']),
+    progress: z.number().min(0).max(1),
+  }),
+  z.object({
     type: z.literal('agent.changed'),
     projectId: idSchema(ID_PREFIXES.project),
     timelineId: idSchema(ID_PREFIXES.timeline),

@@ -23,17 +23,23 @@ export interface AgentJobData {
   runId: string;
 }
 
+export interface RenderJobData {
+  renderId: string;
+}
+
 export class MediaQueues {
   private readonly media: Queue<MediaJobData>;
   private readonly proxy: Queue<MediaJobData>;
   private readonly analysis: Queue<MediaJobData>;
   private readonly agent: Queue<AgentJobData>;
+  private readonly render: Queue<RenderJobData>;
 
   constructor(options: QueueOptions) {
     this.media = new Queue(QUEUES.media, options);
     this.proxy = new Queue(QUEUES.proxy, options);
     this.analysis = new Queue(QUEUES.analysis, options);
     this.agent = new Queue(QUEUES.agent, options);
+    this.render = new Queue(QUEUES.render, options);
   }
 
   private queueFor(step: ProcessingStep) {
@@ -61,12 +67,27 @@ export class MediaQueues {
     );
   }
 
+  async enqueueRender(renderId: string, generation: number): Promise<void> {
+    await this.render.add(
+      'render',
+      { renderId },
+      {
+        jobId: `${renderId}.${generation}`,
+        attempts: 2,
+        backoff: { type: 'fixed', delay: 5000 },
+        removeOnComplete: { age: 86_400 },
+        removeOnFail: { age: 604_800 },
+      },
+    );
+  }
+
   async close(): Promise<void> {
     await Promise.all([
       this.media.close(),
       this.proxy.close(),
       this.analysis.close(),
       this.agent.close(),
+      this.render.close(),
     ]);
   }
 }

@@ -17,6 +17,7 @@ export interface SweepResult {
   abandonedUploads: number;
   requeued: number;
   workDirsRemoved: number;
+  rendersPurged: number;
   orphansKilled: number;
 }
 
@@ -41,6 +42,25 @@ async function purgeDeleted(ctx: PipelineContext, now: number): Promise<number> 
     await ctx.database.media.deleteOne({ _id: doc._id });
   }
   return docs.length;
+}
+
+async function purgeDeletedProjectRenders(ctx: PipelineContext, now: number): Promise<number> {
+  const projects = await ctx.database.projects
+    .find(
+      { deletedAt: { $ne: null, $lte: new Date(now - PURGE_AFTER_MS) } },
+      { projection: { _id: 1 } },
+    )
+    .limit(100)
+    .toArray();
+  let purged = 0;
+  for (const { _id } of projects) {
+    const count = await ctx.database.renders.countDocuments({ projectId: _id });
+    if (count === 0) continue;
+    await ctx.storage.deletePrefix(`renders/${_id}/`);
+    await ctx.database.renders.deleteMany({ projectId: _id });
+    purged += count;
+  }
+  return purged;
 }
 
 async function abandonStaleUploads(ctx: PipelineContext, now: number): Promise<number> {
@@ -104,5 +124,6 @@ export async function sweep(
     requeued: await requeueLostJobs(ctx, now),
     workDirsRemoved: await removeStaleWorkDirs(workDir, now),
     orphansKilled: await ctx.tracker.reap(),
+    rendersPurged: await purgeDeletedProjectRenders(ctx, now),
   };
 }

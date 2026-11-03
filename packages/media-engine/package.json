@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@agent-edit/shared": "*",
+    "@agent-edit/timeline-engine": "*",
     "@agent-edit/validation": "*"
   }
 }

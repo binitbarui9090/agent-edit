@@ -6,7 +6,10 @@ import type {
   JobStatus,
   MediaProbe,
   MediaStatus,
+  RenderPreset,
+  RenderStatus,
   ShortProposal,
+  TimelineState,
   TimelineOperation,
   TimelineTrack,
   TransactionSource,
@@ -155,6 +158,34 @@ export interface AgentRunDoc {
   updatedAt: Date;
 }
 
+export interface RenderJobDoc {
+  _id: string;
+  projectId: string;
+  ownerId: string;
+  timelineId: string;
+  timelineName: string;
+  /** The exact edit being rendered, so later changes cannot alter a job already started. */
+  revision: number;
+  snapshot: TimelineState;
+  preset: RenderPreset;
+  burnCaptions: boolean;
+  width: number;
+  height: number;
+  status: RenderStatus;
+  progress: number;
+  attempts: number;
+  error: string | null;
+  outputKey: string | null;
+  outputSize: number | null;
+  captionsKey: string | null;
+  logKey: string | null;
+  durationTicks: number;
+  generation: number;
+  createdAt: Date;
+  updatedAt: Date;
+  finishedAt: Date | null;
+}
+
 export interface TimelineDoc {
   _id: string;
   projectId: string;
@@ -216,6 +247,7 @@ export interface Database {
   scenes: Collection<SceneDoc>;
   moments: Collection<MomentDoc>;
   agentRuns: Collection<AgentRunDoc>;
+  renders: Collection<RenderJobDoc>;
 }
 
 export async function connectMongo(url: string, dbName: string): Promise<Database> {
@@ -237,6 +269,7 @@ export async function connectMongo(url: string, dbName: string): Promise<Databas
     scenes: db.collection('scenes'),
     moments: db.collection('moments'),
     agentRuns: db.collection('agent_runs'),
+    renders: db.collection('render_jobs'),
   };
   await ensureIndexes(database);
   return database;
@@ -255,6 +288,7 @@ async function ensureIndexes({
   scenes,
   moments,
   agentRuns,
+  renders,
 }: Database): Promise<void> {
   await Promise.all([
     users.createIndex({ email: 1 }, { unique: true }),
@@ -287,5 +321,7 @@ async function ensureIndexes({
     scenes.createIndex({ mediaId: 1, start: 1 }),
     moments.createIndex({ mediaId: 1, kind: 1, start: 1 }),
     agentRuns.createIndex({ timelineId: 1, createdAt: -1 }),
+    renders.createIndex({ projectId: 1, createdAt: -1 }),
+    renders.createIndex({ ownerId: 1, createdAt: -1 }),
   ]);
 }

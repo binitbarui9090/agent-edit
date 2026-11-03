@@ -1,7 +1,8 @@
-import { type AgentJobData, type MediaJobData } from '@agent-edit/infra';
+import { type AgentJobData, type MediaJobData, type RenderJobData } from '@agent-edit/infra';
 import { MAINTENANCE_JOBS, QUEUES } from '@agent-edit/shared';
 import { Queue, Worker, type ConnectionOptions } from 'bullmq';
 import { processAgentRun } from '../agent/run.js';
+import { handleRenderFailure, processRender } from '../render/run.js';
 import { handleStepFailure, processStep, type PipelineContext } from './pipeline.js';
 import { sweep } from './sweep.js';
 
@@ -11,6 +12,7 @@ export interface WorkerOptions {
   mediaConcurrency: number;
   proxyConcurrency: number;
   analysisConcurrency: number;
+  renderConcurrency: number;
   workDir: string;
 }
 
@@ -24,6 +26,7 @@ export async function startMediaWorkers(
     mediaConcurrency,
     proxyConcurrency,
     analysisConcurrency,
+    renderConcurrency,
     workDir,
   }: WorkerOptions,
 ) {
@@ -62,6 +65,29 @@ export async function startMediaWorkers(
     ctx.log.error({ err, runId: job?.data.runId }, 'agent run failed'),
   );
 
+  const render = new Worker<RenderJobData>(
+    QUEUES.render,
+    (job) => processRender(ctx, job.data.renderId, workDir, job.attemptsMade),
+    {
+      ...base,
+      concurrency: renderConcurrency,
+      // A chunk can take a while and the lock renews itself, but a stall must not start a second copy.
+      lockDuration: 2 * 60 * 1000,
+    },
+  );
+  render.on('error', (err) => ctx.log.error({ err }, 'render worker error'));
+  render.on('failed', (job, err) => {
+    if (!job) return;
+    void handleRenderFailure(
+      ctx,
+      job.data.renderId,
+      err,
+      job.attemptsMade >= (job.opts.attempts ?? 1),
+    ).catch((failure: unknown) =>
+      ctx.log.error({ err: failure }, 'could not record render failure'),
+    );
+  });
+
   const maintenanceQueue = new Queue(QUEUES.maintenance, base);
   const maintenance = new Worker(
     QUEUES.maintenance,
@@ -89,6 +115,7 @@ export async function startMediaWorkers(
         proxy.close(),
         analysis.close(),
         agent.close(),
+        render.close(),
         maintenance.close(),
       ]);
       await maintenanceQueue.close();

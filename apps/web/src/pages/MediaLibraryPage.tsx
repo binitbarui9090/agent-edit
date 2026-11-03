@@ -6,7 +6,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { useMedia } from '../api/media';
 import { Button } from '../components/Button';
 import { FormError } from '../components/Field';
-import { Pending } from '../components/Pending';
 import { MediaRow } from '../components/media/MediaRow';
 import { PreviewDialog } from '../components/media/PreviewDialog';
 import { UploadList } from '../components/media/UploadList';
@@ -144,13 +143,6 @@ export function MediaLibraryPage() {
       )}
 
       {preview && <PreviewDialog asset={preview} onClose={() => setPreviewId(null)} />}
-
-      <div className={styles.pending}>
-        <Pending
-          title="Not built yet"
-          items={[{ name: 'Render and export', phase: 5, detail: 'Final video output.' }]}
-        />
-      </div>
     </div>
   );
 }

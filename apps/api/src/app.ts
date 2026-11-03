@@ -17,6 +17,8 @@ import { MediaService } from './modules/media/service.js';
 import { projectRoutes } from './modules/projects/routes.js';
 import { ProjectService } from './modules/projects/service.js';
 import { realtimeRoutes } from './modules/realtime/routes.js';
+import { recentRendersRoutes, renderRoutes } from './modules/renders/routes.js';
+import { RenderService } from './modules/renders/service.js';
 import { timelineRoutes } from './modules/timelines/routes.js';
 import { TimelineService } from './modules/timelines/service.js';
 import { authPlugin } from './plugins/auth.js';
@@ -75,6 +77,7 @@ export async function buildApp({
 
   const timelines = new TimelineService({ database, redis, projects });
 
+  const renders = new RenderService({ database, redis, queues, storage, projects, timelines });
   const agent = new AgentService({ database, redis, queues, projects, timelines });
 
   await app.register(authPlugin, { auth, webOrigin: config.WEB_ORIGIN });
@@ -86,6 +89,8 @@ export async function buildApp({
       await api.register(mediaRoutes, { prefix: '/projects', media });
       await api.register(timelineRoutes, { prefix: '/projects', timelines });
       await api.register(agentRoutes, { prefix: '/projects', agent });
+      await api.register(renderRoutes, { prefix: '/projects', renders, timelines });
+      await api.register(recentRendersRoutes, { prefix: '/renders', renders });
       await api.register(realtimeRoutes, { auth, projects, redis, webOrigin: config.WEB_ORIGIN });
     },
     { prefix: '/api/v1' },

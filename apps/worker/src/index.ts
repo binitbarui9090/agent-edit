@@ -53,6 +53,7 @@ const mediaWorkers = await startMediaWorkers(
     mediaConcurrency: config.MEDIA_CONCURRENCY,
     proxyConcurrency: config.PROXY_CONCURRENCY,
     analysisConcurrency: config.ANALYSIS_CONCURRENCY,
+    renderConcurrency: config.RENDER_CONCURRENCY,
     workDir: config.WORK_DIR,
   },
 );

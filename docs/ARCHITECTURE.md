@@ -221,7 +221,15 @@ Ripple delete is not an operation. It compiles to `remove_clip` plus `move_clip`
 
 **Measured on a 500-clip timeline** (`e2e/editor.mjs`): 6 clips mounted at once, scrolling at 16.9 ms per frame at the 95th percentile, and 178 ms from an edit to the server's confirmation.
 
-**Render compiler.** A pure function `Timeline → RenderGraph → ffmpeg args`, tested by snapshot and by probing real outputs. It uses per-clip `trim`/`setpts`/`scale`/`overlay`, `atrim`/`atempo`/`volume`/`loudnorm`/`afftdn`/`afade`/`amix`, and `ass`/`subtitles` for captions, passed through `-filter_complex_script` so long timelines do not hit argv limits.
+**Render compiler.** A pure function from a timeline snapshot to FFmpeg arguments, always against **original** footage. It uses per-clip `trim`/`setpts`/`scale`/`overlay` for picture and `atempo`/`volume`/`afftdn`/`amix` for sound, with captions burned in through `ass`, and the graph is passed as a file so long timelines do not hit argument limits.
+
+Timelines render in **chunks** of at most 5 minutes or 24 clips, each its own FFmpeg process, joined without re-encoding. One command would hold a decoder open per clip and memory would grow with clip count. A retry repeats only unfinished chunks, and chunk boundaries are moved out of any fade. Audio stays PCM until the final join, so no AAC gap appears at a seam.
+
+**Normalization** measures each clip's loudness once and applies a fixed gain toward -16 LUFS, capped at 20 dB. A fixed gain cannot pump, and it is unaffected by chunking.
+
+**Verification.** A job only reports success after probing its own output for the expected length and size. Tests go further and read real pixels and audio levels back out of rendered files.
+
+**Fades.** `fade_black` fades against whatever is underneath. A true crossfade needs two overlapping clips on a track, which the timeline does not allow, so the UI does not offer one.
 
 **FFmpeg safety.** Worker process only; `spawn` with an argv array and no shell; `-nostdin`; `-protocol_whitelist file,pipe` plus `-format_whitelist mov,matroska,webm`. The second flag matters: a file named `.mp4` whose content is an ffconcat script would otherwise follow relative paths to sibling files, and a test proves that attack succeeds without it. Each job gets its own scratch directory, a read-only source copy and a kill-on-stall timer. Originals are never modified, and storage keys are generated rather than taken from user input.
 
@@ -263,7 +271,7 @@ The model outputs a **plan**, never timeline edits. A deterministic compiler tur
 | **2. Media** ✅      | Storage, resumable multipart upload, FFprobe, thumbnails, waveform, proxy, job DAG, WebSocket progress, media library | Interrupt and resume a multi-GB upload; proxy plays                   |
 | **3. Timeline** ✅   | `timeline-engine`, op log, multi-track editor, playback, undo/redo, versions                                          | Every gesture changes persisted state; 500-clip timeline stays smooth |
 | **4. AI** ✅         | Adapters, transcription, scenes, speakers, moments, planner, proposal flow                                            | Plan → preview → apply → undo with attribution                        |
-| **5. Render**        | Compiler, multi-track output, audio, captions, export jobs, signed download                                           | Output duration and streams match the timeline when probed            |
+| **5. Render** ✅     | Compiler, multi-track output, audio, captions, export jobs, signed download                                           | Output duration and streams match the timeline when probed            |
 | **6. Advanced**      | B-roll, Shorts as independent timelines, reframing, advanced audio                                                    | Demo steps 7–11 end to end                                            |
 | **7. Hardening**     | Profiling, integration tests, security review, render validation                                                      | The full 15-step demo is the acceptance test                          |
 

@@ -20,11 +20,13 @@ import { request } from '../api/client';
 import { useProjectEvents } from '../api/events';
 import { useMedia } from '../api/media';
 import { useProject } from '../api/projects';
+import { rendersKey } from '../api/renders';
 import { getMainTimeline, getTimeline, listTimelines } from '../api/timelines';
 import { Button } from '../components/Button';
 import { FormError } from '../components/Field';
 import { AgentPanel } from '../editor/AgentPanel';
 import { EditorContext } from '../editor/EditorContext';
+import { ExportPanel } from '../editor/ExportPanel';
 import { HistoryPanel } from '../editor/HistoryPanel';
 import { Inspector } from '../editor/Inspector';
 import { MediaBin } from '../editor/MediaBin';
@@ -98,6 +100,9 @@ export function EditorPage() {
     onAgentChanged: (changedTimelineId) => {
       void client.invalidateQueries({ queryKey: agentRunsKey(changedTimelineId) });
     },
+    onRenderChanged: () => {
+      void client.invalidateQueries({ queryKey: rendersKey(projectId) });
+    },
   });
   const mediaQuery = useMedia(projectId, live);
   const assets: MediaAsset[] = useMemo(
@@ -126,7 +131,7 @@ export function EditorPage() {
   const editorError = useEditor((state) => state.error);
   const pxPerSecond = useEditor((state) => state.pxPerSecond);
   const previewing = useEditor((state) => state.previewRunId !== null);
-  const [panel, setPanel] = useState<'inspector' | 'agent' | 'history'>('inspector');
+  const [panel, setPanel] = useState<'inspector' | 'agent' | 'export' | 'history'>('inspector');
   const navigate = useNavigate();
   const timelines = useQuery({
     queryKey: ['timelines', projectId],
@@ -376,6 +381,7 @@ export function EditorPage() {
                 [
                   ['inspector', 'Inspector'],
                   ['agent', 'Agent'],
+                  ['export', 'Export'],
                   ['history', 'History'],
                 ] as const
               ).map(([value, label]) => (
@@ -396,6 +402,9 @@ export function EditorPage() {
               {panel === 'inspector' && <Inspector />}
               {panel === 'agent' && timeline && (
                 <AgentPanel projectId={projectId} timelineId={timeline.id} />
+              )}
+              {panel === 'export' && timeline && (
+                <ExportPanel projectId={projectId} timelineId={timeline.id} />
               )}
               {panel === 'history' && timeline && (
                 <HistoryPanel projectId={projectId} timelineId={timeline.id} />

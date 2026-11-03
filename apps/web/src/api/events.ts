@@ -13,6 +13,7 @@ const FINAL_CLOSE_CODES = new Set([4401, 4404]);
 export interface ProjectEventListeners {
   onTimelineChanged?: (revision: number) => void;
   onAgentChanged?: (timelineId: string) => void;
+  onRenderChanged?: () => void;
 }
 
 /** Returns whether the socket is live, so callers can fall back to polling and say so. */
@@ -83,6 +84,8 @@ export function useProjectEvents(
           current.current.onTimelineChanged?.(event.data.revision);
         } else if (event.data.type === 'agent.changed') {
           current.current.onAgentChanged?.(event.data.timelineId);
+        } else if (event.data.type === 'render.changed') {
+          current.current.onRenderChanged?.();
         } else if (event.data.type === 'job.progress') {
           const { mediaId, step, status, progress } = event.data;
           patchJobProgress(client, projectId, mediaId, { step, status, progress });

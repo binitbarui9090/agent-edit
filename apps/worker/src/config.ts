@@ -13,6 +13,7 @@ const envSchema = storageEnvSchema.extend(aiEnvSchema.shape).extend({
   MEDIA_CONCURRENCY: z.coerce.number().int().positive().default(3),
   PROXY_CONCURRENCY: z.coerce.number().int().positive().default(1),
   ANALYSIS_CONCURRENCY: z.coerce.number().int().positive().default(1),
+  RENDER_CONCURRENCY: z.coerce.number().int().positive().default(1),
   FFMPEG_PATH: z.string().min(1).default('ffmpeg'),
   FFPROBE_PATH: z.string().min(1).default('ffprobe'),
 });

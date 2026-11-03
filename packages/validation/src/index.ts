@@ -5,4 +5,5 @@ export * from './common.js';
 export * from './media.js';
 export * from './operations.js';
 export * from './project.js';
+export * from './render.js';
 export * from './timeline.js';
