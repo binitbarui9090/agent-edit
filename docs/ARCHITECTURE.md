@@ -2,7 +2,7 @@
 
 > **Central principle.** AI decides what could be edited. The timeline shows exactly how it was edited. The creator always has the final say.
 
-Status of each section is tracked in [Phased plan](#8-phased-development-plan). Anything described here but not yet shipped is design, not a claim that it works.
+All phases are built. What it does not do is listed under [Known limitations](#9-known-limitations).
 
 ## 1. Environment findings (Phase 0)
 
@@ -223,7 +223,9 @@ Ripple delete is not an operation. It compiles to `remove_clip` plus `move_clip`
 
 **Render compiler.** A pure function from a timeline snapshot to FFmpeg arguments, always against **original** footage. It uses per-clip `trim`/`setpts`/`scale`/`overlay` for picture and `atempo`/`volume`/`afftdn`/`amix` for sound, with captions burned in through `ass`, and the graph is passed as a file so long timelines do not hit argument limits.
 
-Timelines render in **chunks** of at most 5 minutes or 24 clips, each its own FFmpeg process, joined without re-encoding. One command would hold a decoder open per clip and memory would grow with clip count. A retry repeats only unfinished chunks, and chunk boundaries are moved out of any fade. Audio stays PCM until the final join, so no AAC gap appears at a seam.
+Timelines render in **chunks** of at most 5 minutes or 16 clips, each its own FFmpeg process, joined without re-encoding. One command would hold a decoder open per clip and memory would grow with clip count. A retry repeats only unfinished chunks, and chunk boundaries are moved out of any fade. Audio stays PCM until the final join, so no AAC gap appears at a seam.
+
+**Measured on this Mac** (`npm run test:long`, synthetic footage): a full 3-hour export took 24 minutes with FFmpeg peaking at 461 MB and exactly 324,000 of 324,000 frames. A 500-clip edit with every clip seeking somewhere new in that file took 2.3 minutes at 1.3 GB, with exactly 30,000 of 30,000 frames. Decoders get fewer threads as a chunk holds more clips, which halved that peak from 2.5 GB.
 
 **Normalization** measures each clip's loudness once and applies a fixed gain toward -16 LUFS, capped at 20 dB. A fixed gain cannot pump, and it is unaffected by chunking.
 
@@ -237,7 +239,7 @@ Timelines render in **chunks** of at most 5 minutes or 24 clips, each its own FF
 
 **Processing pipeline.** `complete` seeds one `AnalysisJob` per step and enqueues `probe`, which enqueues `thumbnails`, `waveform`, `proxy` and `audio`. Proxy encodes have their own queue so a long encode cannot delay quick steps on other footage. BullMQ job ids are deterministic, so enqueueing is safe to repeat. Required steps are `probe` and `proxy`; if a thumbnail or waveform step fails, the asset is still usable and the failure stays visible and retryable. A periodic sweep purges deleted media, aborts uploads abandoned for 7 days, requeues jobs whose queue entry was lost and removes stale scratch directories.
 
-**Measured on a 3-hour, 3.32 GB file** (Apple Silicon, 10 cores; `npm run test:long`): processing took 9.6 minutes including a crash, about 19x real time. Peak memory was 264 MB for the worker, 314 MB for FFmpeg and 32 MB of browser heap. Seeking the proxy to the 2-hour mark took about 200 ms. The footage is synthetic noise, so these are indicative rather than a benchmark of real recordings.
+**Measured on a 3-hour, 3.32 GB file** (Apple Silicon, 10 cores; `npm run test:long`): the media steps took 9.6 minutes including a crash, about 19x real time, and full analysis with speech recognition took 16 minutes. Peak memory was 295 MB for the worker, 373 MB for FFmpeg and 36 MB of browser heap. Seeking the proxy to the 2-hour mark took about 200 ms. The footage is synthetic, so these are indicative rather than a benchmark of real recordings.
 
 **Realtime.** Workers publish to Redis; the API relays to sockets watching that project. MongoDB stays the source of truth, so a missed event costs nothing beyond a refetch. The client treats 60 seconds without a server heartbeat, or a browser `offline` event, as a lost connection, says so, and polls until it reconnects.
 
@@ -279,6 +281,33 @@ It chooses one position per Short. It does not follow someone across the frame, 
 | **4. AI** ✅         | Adapters, transcription, scenes, speakers, moments, planner, proposal flow                                            | Plan → preview → apply → undo with attribution                        |
 | **5. Render** ✅     | Compiler, multi-track output, audio, captions, export jobs, signed download                                           | Output duration and streams match the timeline when probed            |
 | **6. Advanced** ✅   | B-roll, Shorts as independent timelines, reframing, advanced audio                                                    | Demo steps 7–11 end to end                                            |
-| **7. Hardening**     | Profiling, integration tests, security review, render validation                                                      | The full 15-step demo is the acceptance test                          |
+| **7. Hardening** ✅  | Profiling, integration tests, security review, render validation                                                      | The full 15-step demo is the acceptance test                          |
 
 Each phase ends with: what was built, files changed, test results, what works, remaining limitations and the exact next step.
+
+## 9. Known limitations
+
+**Tested on synthetic footage.** Every test uses generated video and speech from macOS `say`. Nothing here has been run on a real camera recording, so expect surprises from variable frame rates, unusual codecs and real room noise. Quality of the agent's creative choices on long, real material is unproven.
+
+**Untested against live services.** The Claude and Deepgram adapters were only tested against local stand-ins, because no paid keys were used. Their first real run is the moment to watch. The tested paths are whisper.cpp `base.en`, Ollama `qwen3:8b` and `gemma3:4b`.
+
+**Preview is not the render.** The browser preview can land about a frame off at cuts and may briefly hold on rapid multi-track edits. Normalization, noise reduction and gain above 100% are heard only in the render. Timeline data and rendered output are frame-accurate, and tests confirm exact frame counts.
+
+**AI features**
+
+- Speaker identification needs Deepgram. With whisper.cpp the step is skipped and says why.
+- The bundled Whisper model is English only. Other languages need another model through `WHISPER_MODEL_PATH`.
+- Reframing picks one crop per Short from where movement is. It does not track a moving subject and is not face detection.
+- B-roll is matched from your own library by words in file names, folders and scene descriptions. There is no stock or generated footage.
+- Undoing an agent edit does not delete Shorts it created, which are independent timelines.
+
+**Accounts and operations**
+
+- Registration is open, with no email verification, password reset or account deletion.
+- Each project has one owner. There is no sharing or real-time collaboration between people.
+- The source cache is per machine, so each worker host downloads footage for itself, and a worker's scratch disk needs room for it.
+- A killed worker's stray FFmpeg is stopped when another worker starts on that machine. If none ever starts, it runs until it finishes.
+- CPU and memory limits exist only in `compose.production.yml`. Running the worker directly has none.
+- Development storage is limited by the Docker VM's disk: 60 GB under Colima's default here.
+
+**Editing.** One crop or transform per clip, with no keyframes. Fades are to black or whatever lies beneath; there are no true crossfades, because clips on a track cannot overlap. The editor adapts to small screens but is designed for desktop.

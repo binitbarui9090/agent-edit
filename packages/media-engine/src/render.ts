@@ -73,7 +73,7 @@ function insideTransition(state: TimelineState, time: number): number | null {
  */
 export function planRenderChunks(
   state: TimelineState,
-  { maxSeconds = 300, maxClips = 24 }: ChunkOptions = {},
+  { maxSeconds = 300, maxClips = 16 }: ChunkOptions = {},
 ): RenderChunk[] {
   const duration = timelineDuration(state);
   const frame = ticksPerFrame(state.frameRate);
@@ -239,12 +239,22 @@ export function buildChunkCommand(state: TimelineState, options: ChunkCommandOpt
   const graph: string[] = [];
   let inputCount = 0;
 
+  const overlaps = ({ clip }: { clip: MediaClip }) =>
+    clip.start < chunk.end && clipEnd(clip) > chunk.start;
+  const inputTotal =
+    visible(state).filter(overlaps).length + audible(state, sources).filter(overlaps).length;
+  // Every decoder allocates frames per thread, so a chunk of many clips gives each just one. Only a
+  // few run at any moment. A chunk of one long clip keeps full decoding speed.
+  const decoderThreads = inputTotal >= 8 ? '1' : inputTotal >= 4 ? '2' : '0';
+
   const addInput = (clip: MediaClip, sliceStart: number, sliceEnd: number) => {
     const source = sources.get(clip.sourceMediaId);
     if (!source) throw new Error(`No source file for media ${clip.sourceMediaId}`);
     const sourceFrom = clip.sourceIn + (sliceStart - clip.start) * clip.speed;
     const sourceLength = (sliceEnd - sliceStart) * clip.speed;
     inputs.push(
+      '-threads',
+      decoderThreads,
       ...UNTRUSTED_INPUT_ARGS,
       '-ss',
       seconds(sourceFrom),

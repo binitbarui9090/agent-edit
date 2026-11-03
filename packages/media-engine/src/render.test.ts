@@ -592,6 +592,29 @@ describe('chunks', () => {
     }
   });
 
+  it('gives each decoder less room as a chunk holds more clips, so memory stays bounded', () => {
+    const threadsFor = (count: number) => {
+      const state = build((st) =>
+        Array.from({ length: count }, (_v, i): TimelineOperation => ({
+          op: 'add_clip',
+          trackId: trackId(st, 'VIDEO'),
+          clip: media('counting', i, 0, 1),
+        })),
+      );
+      const { args } = buildChunkCommand(state, {
+        chunk: { index: 0, start: 0, end: s(count) },
+        sources,
+        width: 640,
+        height: 360,
+        output: 'x.mkv',
+      });
+      return args[args.indexOf('-threads') + 1];
+    };
+    expect(threadsFor(1)).toBe('0');
+    expect(threadsFor(5)).toBe('2');
+    expect(threadsFor(10)).toBe('1');
+  });
+
   it('never splits a fade between chunks', () => {
     const clip = {
       ...createMediaClip(

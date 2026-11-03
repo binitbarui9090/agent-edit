@@ -28,6 +28,9 @@ export const listTimelines = (projectId: string) =>
     schema: z.object({ items: z.array(timelineSummarySchema) }),
   });
 
+export const deleteTimeline = (projectId: string, timelineId: string) =>
+  request('DELETE', base(projectId, timelineId));
+
 export const commitTransaction = (
   projectId: string,
   timelineId: string,

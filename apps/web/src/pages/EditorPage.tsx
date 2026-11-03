@@ -12,7 +12,7 @@ import {
   type MediaPlayback,
   type TimelineOperation,
 } from '@agent-edit/validation';
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { agentRunsKey } from '../api/agent';
@@ -21,7 +21,7 @@ import { useProjectEvents } from '../api/events';
 import { useMedia } from '../api/media';
 import { useProject } from '../api/projects';
 import { rendersKey } from '../api/renders';
-import { getMainTimeline, getTimeline, listTimelines } from '../api/timelines';
+import { deleteTimeline, getMainTimeline, getTimeline, listTimelines } from '../api/timelines';
 import { Button } from '../components/Button';
 import { FormError } from '../components/Field';
 import { AgentPanel } from '../editor/AgentPanel';
@@ -133,6 +133,16 @@ export function EditorPage() {
   const previewing = useEditor((state) => state.previewRunId !== null);
   const [panel, setPanel] = useState<'inspector' | 'agent' | 'export' | 'history'>('inspector');
   const navigate = useNavigate();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const removeShort = useMutation({
+    mutationFn: () => deleteTimeline(projectId, timelineId ?? ''),
+    onSuccess: async () => {
+      setConfirmingDelete(false);
+      await client.invalidateQueries({ queryKey: ['timelines', projectId] });
+      void navigate(`/projects/${projectId}/edit`, { replace: true });
+    },
+    onError: (err) => useEditor.setState({ error: errorMessage(err) }),
+  });
   const timelines = useQuery({
     queryKey: ['timelines', projectId],
     queryFn: () => listTimelines(projectId),
@@ -336,6 +346,25 @@ export function EditorPage() {
               Add caption
             </Button>
             <span className={styles.divider} />
+            {timeline?.kind === 'short' && (
+              <>
+                {confirmingDelete ? (
+                  <>
+                    <Button variant="danger" onClick={() => removeShort.mutate()}>
+                      Confirm delete
+                    </Button>
+                    <Button variant="ghost" onClick={() => setConfirmingDelete(false)}>
+                      Keep
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" onClick={() => setConfirmingDelete(true)}>
+                    Delete this Short
+                  </Button>
+                )}
+                <span className={styles.divider} />
+              </>
+            )}
             <label className={styles.zoom}>
               <span>Zoom</span>
               <input

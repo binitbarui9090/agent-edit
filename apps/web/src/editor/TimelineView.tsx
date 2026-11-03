@@ -273,6 +273,37 @@ const ClipView = memo(function ClipView({
   );
 });
 
+/** A draft while dragging, committed once on release, so one gesture is one undoable edit. */
+function TrackVolume({ track }: { track: TimelineTrack }) {
+  const [draft, setDraft] = useState(track.volume);
+  useEffect(() => setDraft(track.volume), [track.volume]);
+  const commit = () => {
+    if (draft !== track.volume) {
+      commitEdit(
+        [{ op: 'update_track', trackId: track.id, volume: draft }],
+        `Set ${track.name} volume to ${Math.round(draft * 100)}%`,
+      );
+    }
+  };
+  return (
+    <input
+      type="range"
+      className={styles.trackVolume}
+      min={0}
+      max={2}
+      step={0.05}
+      value={draft}
+      aria-label={`${track.name} volume`}
+      title={`${Math.round(draft * 100)}%`}
+      disabled={track.locked}
+      onChange={(event) => setDraft(Number(event.target.value))}
+      onPointerUp={commit}
+      onKeyUp={commit}
+      onBlur={commit}
+    />
+  );
+}
+
 function clipLabel(clip: TimelineClip, media: ReadonlyMap<string, MediaAsset>): string {
   if (clip.kind === 'caption') return clip.text;
   return media.get(clip.sourceMediaId)?.name ?? 'Missing media';
@@ -561,29 +592,32 @@ export function TimelineView() {
             data-track-type={track.type}
             data-header-track={track.type}
           >
-            <span className={styles.trackName}>{track.name}</span>
-            {track.type !== 'CAPTIONS' && (
+            <div className={styles.headerTop}>
+              <span className={styles.trackName}>{track.name}</span>
+              {track.type !== 'CAPTIONS' && (
+                <button
+                  type="button"
+                  className={styles.toggle}
+                  data-active={track.muted}
+                  aria-pressed={track.muted}
+                  aria-label={`Mute ${track.name}`}
+                  onClick={() => trackVolumes(track)}
+                >
+                  M
+                </button>
+              )}
               <button
                 type="button"
                 className={styles.toggle}
-                data-active={track.muted}
-                aria-pressed={track.muted}
-                aria-label={`Mute ${track.name}`}
-                onClick={() => trackVolumes(track)}
+                data-active={track.locked}
+                aria-pressed={track.locked}
+                aria-label={`Lock ${track.name}`}
+                onClick={() => trackLock(track)}
               >
-                M
+                L
               </button>
-            )}
-            <button
-              type="button"
-              className={styles.toggle}
-              data-active={track.locked}
-              aria-pressed={track.locked}
-              aria-label={`Lock ${track.name}`}
-              onClick={() => trackLock(track)}
-            >
-              L
-            </button>
+            </div>
+            {track.type !== 'CAPTIONS' && <TrackVolume track={track} />}
           </div>
         ))}
       </div>

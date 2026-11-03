@@ -356,7 +356,7 @@ await page
   .getByTestId('clip')
   .click({ position: { x: 20, y: 20 } });
 await page.getByRole('region', { name: 'Timeline' }).waitFor();
-const volume = page.getByLabel('Volume');
+const volume = page.getByLabel(/^Volume/);
 await volume.fill('0.3');
 await volume.blur();
 await settled();
@@ -370,6 +370,14 @@ ok(
   track(timeline, 'MUSIC').clips[0].audio.normalize === true,
 );
 await shot('31-inspector');
+
+// --- Track volume ---
+const musicVolume = page.getByLabel('Music volume');
+await musicVolume.fill('0.5');
+await musicVolume.blur();
+await settled();
+timeline = await server();
+ok('the track volume control writes through', track(timeline, 'MUSIC').volume === 0.5);
 
 // --- Captions ---
 await seekTo(1);
@@ -475,8 +483,8 @@ await page
   .click({ position: { x: 20, y: 20 } });
 const offlineRevision = (await server()).revision;
 await ctx.setOffline(true);
-await page.getByLabel('Volume').fill('0.7');
-await page.getByLabel('Volume').blur();
+await page.getByLabel(/^Volume/).fill('0.7');
+await page.getByLabel(/^Volume/).blur();
 await page.getByTestId('save-state').getByText('Offline').waitFor({ timeout: 15_000 });
 ok('an edit made offline is kept and flagged', true);
 await ctx.setOffline(false);
@@ -600,8 +608,8 @@ await page
   .getByTestId('clip')
   .first()
   .click({ position: { x: 20, y: 20 } });
-await page.getByLabel('Volume').fill('0.9');
-await page.getByLabel('Volume').blur();
+await page.getByLabel(/^Volume/).fill('0.9');
+await page.getByLabel(/^Volume/).blur();
 await settled();
 ok(
   'editing stays quick at this size',

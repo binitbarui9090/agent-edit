@@ -27,12 +27,26 @@
 
 .trackHeader {
   display: flex;
-  align-items: center;
-  gap: 3px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
   height: 44px;
   padding: 0 6px 0 8px;
   border-bottom: 1px solid var(--line);
   border-left: 3px solid var(--track-color);
+}
+
+.headerTop {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.trackVolume {
+  width: 100%;
+  height: 10px;
+  margin: 0;
+  accent-color: var(--track-color);
 }
 
 .trackName {
@@ -47,8 +61,8 @@
 
 .toggle {
   flex: none;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   background: transparent;
   border: 1px solid var(--line-strong);

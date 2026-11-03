@@ -341,12 +341,18 @@ if (run.steps.some((s) => s.operation === 'generate_shorts' && !s.error)) {
     .getByTestId('track-VIDEO')
     .getByTestId('clip')
     .click({ position: { x: 20, y: 20 } });
-  await page.getByLabel('Volume').fill('0.5');
-  await page.getByLabel('Volume').blur();
+  await page.getByLabel(/^Volume/).fill('0.5');
+  await page.getByLabel(/^Volume/).blur();
   await page.getByTestId('save-state').getByText('Saved').waitFor();
   const edited = await api(`/timelines/${shorts[0].id}`);
   ok('a Short can be edited by itself', track(edited, 'VIDEO').clips[0].volume === 0.5);
   ok('editing a Short leaves the main edit alone', (await server()).revision === applied.revision);
+  await page.getByRole('button', { name: 'Delete this Short' }).click();
+  await page.getByRole('button', { name: 'Confirm delete' }).click();
+  await page.waitForURL(`**/projects/${projectId}/edit`);
+  const remaining = (await api('/timelines')).items.filter((t) => t.kind === 'short');
+  ok('a Short can be deleted from the editor', remaining.length === shorts.length - 1);
+  ok('deleting a Short leaves the main edit alone', (await server()).revision === applied.revision);
   await page.goto(`${BASE}/projects/${projectId}/edit`);
   await page.getByRole('tab', { name: 'Agent' }).click();
 }
