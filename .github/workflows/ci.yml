@@ -23,8 +23,12 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      # Ubuntu's FFmpeg includes libass and drawtext, which captions and tests need.
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      # Ubuntu's FFmpeg includes libass and drawtext, which captions and tests need. GitHub's runners
+      # often have it already, and a package mirror that hangs should fail fast rather than for hours.
+      - name: Install FFmpeg
+        timeout-minutes: 5
+        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg)
+      - run: ffmpeg -hide_banner -filters | grep -E "drawtext|subtitles"
       - run: npm ci
       - run: cp .env.example .env
       - run: docker compose up -d --wait
