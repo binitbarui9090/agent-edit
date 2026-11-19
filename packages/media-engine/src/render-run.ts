@@ -13,6 +13,32 @@ import {
   type RenderSource,
 } from './render.js';
 
+const graphOptionCache = new Map<string, Promise<string>>();
+
+/** The major version in `ffmpeg -version`. Builds from git report no number, and are recent. */
+export function parseFfmpegMajor(output: string): number | null {
+  const match = /^ffmpeg version n?(\d+)\./m.exec(output);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * The option that reads a filter graph from a file. FFmpeg 7 introduced `-/filter_complex` and
+ * deprecated `-filter_complex_script`, which 8 then removed, so each version only has one of them.
+ */
+export function graphFileOption(ffmpeg: string): Promise<string> {
+  let option = graphOptionCache.get(ffmpeg);
+  if (!option) {
+    option = new Promise((resolve) => {
+      execFile(ffmpeg, ['-version'], (err, stdout) => {
+        const major = err ? null : parseFfmpegMajor(stdout);
+        resolve(major !== null && major < 7 ? '-filter_complex_script' : '-/filter_complex');
+      });
+    });
+    graphOptionCache.set(ffmpeg, option);
+  }
+  return option;
+}
+
 export function hasFilter(ffmpeg: string, name: string): Promise<boolean> {
   return new Promise((resolve) => {
     execFile(
@@ -153,9 +179,10 @@ export async function renderTimeline(options: RenderOptions): Promise<void> {
     const before = doneTicks;
     // The graph goes in a file: long timelines would overflow an argument list.
     const inputEnd = args.indexOf('-map');
+    const graphOption = await graphFileOption(ffmpeg);
     await runFfmpeg(
       ffmpeg,
-      [...args.slice(0, inputEnd), '-/filter_complex', graphPath, ...args.slice(inputEnd)],
+      [...args.slice(0, inputEnd), graphOption, graphPath, ...args.slice(inputEnd)],
       {
         signal,
         tracker,

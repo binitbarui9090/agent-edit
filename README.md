@@ -19,7 +19,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, and [its limita
 
 ## Run it
 
-Requires Node 22.12+, Docker (Docker Desktop, Colima or Docker Engine) and FFmpeg with libass, which captions need. Most Linux packages include it. On macOS, run `brew install ffmpeg-full`, then set `FFMPEG_PATH` and `FFPROBE_PATH` from `.env.example`.
+Requires Node 22.12+, Docker (Docker Desktop, Colima or Docker Engine) and FFmpeg 6 or newer with libass, which captions need. Most Linux packages include it. On macOS, run `brew install ffmpeg-full`, then set `FFMPEG_PATH` and `FFPROBE_PATH` from `.env.example`.
 
 ```sh
 npm install

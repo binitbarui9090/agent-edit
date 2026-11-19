@@ -14,7 +14,13 @@ import {
 import type { TimelineOperation, TimelineState } from '@agent-edit/validation';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { probeFile } from './probe.js';
-import { hasFilter, measureLoudness, renderTimeline } from './render-run.js';
+import {
+  graphFileOption,
+  hasFilter,
+  measureLoudness,
+  parseFfmpegMajor,
+  renderTimeline,
+} from './render-run.js';
 import {
   buildAssSubtitles,
   buildChunkCommand,
@@ -723,7 +729,7 @@ async function renderSeam(
       'error',
       '-y',
       ...args.slice(0, inputEnd),
-      '-/filter_complex',
+      await graphFileOption(FFMPEG),
       graphPath,
       ...args.slice(inputEnd),
     ]);
@@ -879,5 +885,19 @@ describe('safety', () => {
     });
     expect(graph).toContain("ass=filename='/tmp/a'\\''b;c.ass'");
     expect(graph).not.toContain(sources.get(ids.red!)!.path);
+  });
+});
+
+describe('filter graph option', () => {
+  it('reads the major version from FFmpeg releases and ignores builds with none', () => {
+    expect(parseFfmpegMajor('ffmpeg version 6.1.1-3ubuntu5 Copyright')).toBe(6);
+    expect(parseFfmpegMajor('ffmpeg version 9.0.2 Copyright')).toBe(9);
+    expect(parseFfmpegMajor('ffmpeg version n7.1 Copyright')).toBe(7);
+    expect(parseFfmpegMajor('ffmpeg version N-118000-gabcdef Copyright')).toBeNull();
+  });
+
+  it('picks the option the installed FFmpeg has', async () => {
+    const option = await graphFileOption(FFMPEG);
+    expect(['-/filter_complex', '-filter_complex_script']).toContain(option);
   });
 });
