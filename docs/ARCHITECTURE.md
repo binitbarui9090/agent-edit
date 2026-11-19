@@ -6,15 +6,15 @@ All phases are built. What it does not do is listed under [Known limitations](#9
 
 ## 1. Environment findings (Phase 0)
 
-| Item             | Finding                                                                                             | Consequence                                                                              |
-| ---------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Repository       | Empty, not a git repo                                                                               | Greenfield; nothing to preserve                                                          |
-| Node / npm       | 26.13 / 11.20; no pnpm                                                                              | npm workspaces, no extra tooling                                                         |
-| Docker           | CLI + Compose via Colima; the `vdo` project's stack shares this runtime and publishes Redis on 6379 | All infra runs through `docker-compose.yml`; Agent Edit's Redis is on host port **6380** |
-| MongoDB, Redis   | Not installed                                                                                       | Containers only                                                                          |
-| FFmpeg / FFprobe | 9.0.2 via Homebrew, with libx264, aac and flac                                                      | Required on any machine running the worker                                               |
-| Ollama           | Running; `gemma3:4b`, `qwen3:1.7b`, `qwen3:8b`                                                      | Free local LLM adapter is viable for development                                         |
-| Hardware         | Apple Silicon, 10 cores, 24 GB, 261 GB free                                                         | Local Whisper is viable; long proxies and renders are slow but workable                  |
+| Item             | Finding                                                                                           | Consequence                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Repository       | Empty, not a git repo                                                                             | Greenfield; nothing to preserve                                                          |
+| Node / npm       | 26.13 / 11.20; no pnpm                                                                            | npm workspaces, no extra tooling                                                         |
+| Docker           | CLI + Compose via Colima; another project's stack shares this runtime and publishes Redis on 6379 | All infra runs through `docker-compose.yml`; Agent Edit's Redis is on host port **6380** |
+| MongoDB, Redis   | Not installed                                                                                     | Containers only                                                                          |
+| FFmpeg / FFprobe | 9.0.2 via Homebrew, with libx264, aac and flac                                                    | Required on any machine running the worker                                               |
+| Ollama           | Running; `gemma3:4b`, `qwen3:1.7b`, `qwen3:8b`                                                    | Free local LLM adapter is viable for development                                         |
+| Hardware         | Apple Silicon, 10 cores, 24 GB, 261 GB free                                                       | Local Whisper is viable; long proxies and renders are slow but workable                  |
 
 ## 2. System overview
 
@@ -263,6 +263,18 @@ Infrastructure: MongoDB, Redis (`noeviction`, which BullMQ requires) and S3-comp
 
 The model outputs a **plan**, never timeline edits. A deterministic compiler turns each step into exact operations using measured facts (silence ranges, repeated takes, word timings), and the reducer dry-runs every step. A small local model therefore produces a worse plan, not a corrupted timeline, and a step that cannot apply is reported on its own while the rest still work. Only the creator's approval in the API can commit anything, and it recompiles against the current timeline so newer edits are never overwritten.
 
+Every instruction goes through `planInstruction`, which takes one of three routes:
+
+1. **Understood exactly.** `understandInstruction` reads it clause by clause, and each pattern must match a whole clause. If every clause matches, no model is asked, so the plan arrives immediately and carries the creator's exact numbers. The run is labelled as having used no model. "Don't remove the pauses" matches nothing and goes to a model, because a wrong guess here would have nothing to catch it.
+2. **A question.** It gets an answer from the same material, stored as an `answered` run with nothing to approve.
+3. **Everything else** goes to the model, then `reconcilePlan` holds the answer to the words used. A clause understood exactly overrides the model's version of it or is added if the model dropped it. Whole-edit operations run once. A step that removes footage, makes Shorts, adds captions or sets a target length is left out, with a warning, unless the instruction asked for that kind of thing.
+
+The model reads the timeline in timeline seconds, not source seconds, so its times stay right after earlier edits. It also gets the selection and playhead, the last six requests with their outcomes, and chapters, highlights and scene summaries. All of that except the selection and playhead is delimited as data.
+
+Asked for a target length, a second prompt picks which numbered lines to keep. The choice is stored on the run, so applying recompiles to the same cut. Compiling also reports each step's measured `secondsSaved` and warns when an unrequested plan removes more than half the edit. `suggestEdits` compiles each common edit against the current timeline, so a suggestion's numbers are what it would really do, and spent ones disappear.
+
+`npm run eval:agent` scores this on 21 instructions. With `qwen3:8b` the previous planner passed 16 at 20.1 s on average, and this one passes 21 at 7.5 s, where 14 need no model. The previous score includes one case it could not pass, since filler-word removal did not exist yet. The 21 cases are short and synthetic, and were written while building this, so they guard against regressions and do not measure taste.
+
 **Tested end to end on this Mac:** whisper.cpp `base.en` and Ollama `qwen3:8b`. The Claude and Deepgram adapters are tested against local stand-ins only, because no paid key was used. Speaker identification requires Deepgram: whisper.cpp does not provide it and the step says so.
 
 ### Reframing
@@ -300,6 +312,9 @@ Each phase ends with: what was built, files changed, test results, what works, r
 - Reframing picks one crop per Short from where movement is. It does not track a moving subject and is not face detection.
 - B-roll is matched from your own library by words in file names, folders and scene descriptions. There is no stock or generated footage.
 - Undoing an agent edit does not delete Shorts it created, which are independent timelines.
+- Filler-word removal depends on the transcript containing them, and speech models often leave them out. It has only been tested with constructed word timings, because `say` does not produce "um". When none are found it says so.
+- A vague request depends on the model. Answers to vague requests take 15 to 40 seconds on `qwen3:8b`.
+- The format of a project started from a dropped file is read by the browser. If it cannot decode the codec, or the shape is not one of the four project formats, the project falls back to 1080p landscape. Frame rate is not read and stays at 30.
 
 **Accounts and operations**
 
@@ -310,4 +325,4 @@ Each phase ends with: what was built, files changed, test results, what works, r
 - CPU and memory limits exist only in `compose.production.yml`. Running the worker directly has none.
 - Development storage is limited by the Docker VM's disk: 60 GB under Colima's default here.
 
-**Editing.** One crop or transform per clip, with no keyframes. Fades are to black or whatever lies beneath; there are no true crossfades, because clips on a track cannot overlap. The editor adapts to small screens but is designed for desktop.
+**Editing.** One crop or transform per clip, with no keyframes. Fades are to black or whatever lies beneath; there are no true crossfades, because clips on a track cannot overlap. The editor needs a window at least 1024 px wide and scrolls sideways below that. Other pages adapt to small screens.

@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useOutletContext, useParams } from 'react-router';
 import { useProjectEvents } from '../api/events';
 import { useDeleteProject, useProject, useUpdateProject } from '../api/projects';
-import { Button } from '../components/Button';
+import { Button, ButtonLink } from '../components/Button';
 import { Field, FormError } from '../components/Field';
 import { SettingsFields } from '../components/SettingsFields';
 import {
@@ -45,7 +45,12 @@ function ProjectFrame({ project }: { project: Project }) {
         <span aria-hidden="true">/</span>
         <span>{project.name}</span>
       </nav>
-      <h1 className={styles.title}>{project.name}</h1>
+      <div className={styles.titleRow}>
+        <h1 className={styles.title}>{project.name}</h1>
+        <ButtonLink variant="primary" to={`/projects/${project.id}/edit`}>
+          Start editing
+        </ButtonLink>
+      </div>
       <nav className={styles.tabs} aria-label="Project">
         <NavLink end to={`/projects/${project.id}`} className={tabClass}>
           Media

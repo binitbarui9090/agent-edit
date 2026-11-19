@@ -1,4 +1,10 @@
-import type { TimelineClip, TimelineState, TimelineTrack, TrackType } from '@agent-edit/validation';
+import type {
+  MediaClip,
+  TimelineClip,
+  TimelineState,
+  TimelineTrack,
+  TrackType,
+} from '@agent-edit/validation';
 
 export interface LocatedClip {
   track: TimelineTrack;
@@ -72,4 +78,38 @@ export function isRangeFree(
   ignore: ReadonlySet<string> = new Set(),
 ): boolean {
   return clipsInRange(track.clips, start, end).every((clip) => ignore.has(clip.id));
+}
+
+export interface SourceRange {
+  mediaId: string;
+  /** Ticks in the source file. */
+  start: number;
+  end: number;
+}
+
+/** The VIDEO track is the edit's spine: transcript and silence map onto the footage there. */
+export function spineClips(state: TimelineState): MediaClip[] {
+  return (firstTrackOfType(state, 'VIDEO')?.clips ?? []).filter(
+    (clip): clip is MediaClip => clip.kind === 'media',
+  );
+}
+
+/** Where a stretch of source footage currently sits on the timeline, if it is used at all. */
+export function sourceToTimeline(
+  state: TimelineState,
+  range: SourceRange,
+): Array<{ start: number; end: number; clip: MediaClip }> {
+  const found: Array<{ start: number; end: number; clip: MediaClip }> = [];
+  for (const clip of spineClips(state)) {
+    if (clip.sourceMediaId !== range.mediaId) continue;
+    const from = Math.max(range.start, clip.sourceIn);
+    const to = Math.min(range.end, clip.sourceOut);
+    if (to <= from) continue;
+    found.push({
+      start: clip.start + (from - clip.sourceIn) / clip.speed,
+      end: clip.start + (to - clip.sourceIn) / clip.speed,
+      clip,
+    });
+  }
+  return found;
 }

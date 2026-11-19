@@ -13,6 +13,9 @@ interface OllamaResponse {
   error?: string;
 }
 
+/** Loading a model takes far longer than asking it, and requests tend to come in bursts. */
+const KEEP_ALIVE = '15m';
+
 async function chat(
   baseUrl: string,
   body: Record<string, unknown>,
@@ -21,7 +24,7 @@ async function chat(
   const response = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ stream: false, think: false, ...body }),
+    body: JSON.stringify({ stream: false, think: false, keep_alive: KEEP_ALIVE, ...body }),
     ...(signal ? { signal } : {}),
   });
   const payload = (await response.json().catch(() => null)) as OllamaResponse | null;

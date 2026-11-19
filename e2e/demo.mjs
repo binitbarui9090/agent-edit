@@ -166,7 +166,7 @@ ok('asking changed nothing yet', (await server()).revision === before.revision);
 step(8, 'Show the AI-generated edit plan');
 const run = (await api(`/timelines/${before.id}/agent-runs`)).items[0];
 console.log(`      plan by ${run.provider.id} ${run.provider.model ?? ''}: ${run.summary}`);
-ok('the plan came from a real model', run.provider.id !== 'mock' && !run.provider.isMock);
+ok('the plan is not mock output', run.provider.id !== 'mock' && !run.provider.isMock);
 const asked = [
   'speed_range',
   'remove_repeated_takes',

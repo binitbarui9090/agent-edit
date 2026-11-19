@@ -339,6 +339,8 @@ ok('footage cannot be dragged onto the captions track', timeline.revision === re
 
 // --- Drag and drop from the bin ---
 const musicRow = await clipBox(page.getByTestId('track-MUSIC'));
+// Picking a clip brings up its properties, so Media has to be asked for again.
+await page.getByRole('tab', { name: 'Media' }).click();
 await page
   .getByTestId('bin-item')
   .filter({ hasText: 'cutaway.mp4' })

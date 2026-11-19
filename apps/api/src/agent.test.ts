@@ -237,6 +237,7 @@ async function propose(actor: Actor, plan: AgentPlan): Promise<AgentRun> {
           reason: step.reason,
           summary: step.operation,
           operationCount: 1,
+          secondsSaved: 0,
           error: null,
         })),
         provider: { id: 'ollama', model: 'test-model', isMock: false },

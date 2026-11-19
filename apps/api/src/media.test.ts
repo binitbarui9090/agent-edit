@@ -428,6 +428,27 @@ describe('media library', () => {
     });
   });
 
+  it('shows the first file added on the project, not whichever sorts first', async () => {
+    const actor = await newActor();
+    const first = (await initUpload(actor)).json().media;
+    const later = (await initUpload(actor)).json().media;
+    const posterOf = async () =>
+      (
+        await app.inject({
+          url: `/api/v1/projects/${actor.projectId}`,
+          headers: { cookie: actor.cookie },
+        })
+      ).json().media.posterUrl as string | null;
+    const setPoster = (id: string, key: string, createdAt: Date) =>
+      database.media.updateOne({ _id: id }, { $set: { 'storage.posterKey': key, createdAt } });
+
+    // Only the later file has a poster yet, so it stands in until the first one has one.
+    await setPoster(later.id, 'posters/a-later.jpg', new Date(2026, 0, 2));
+    expect(await posterOf()).toContain('a-later.jpg');
+    await setPoster(first.id, 'posters/z-first.jpg', new Date(2026, 0, 1));
+    expect(await posterOf()).toContain('z-first.jpg');
+  });
+
   it('retries failed steps with a fresh job and refuses when nothing failed', async () => {
     const actor = await newActor();
     const { media } = (await initUpload(actor)).json();

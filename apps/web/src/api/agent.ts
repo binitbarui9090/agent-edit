@@ -1,4 +1,10 @@
-import { agentRunSchema, mediaAnalysisSchema, timelineSchema } from '@agent-edit/validation';
+import {
+  agentRunSchema,
+  agentSuggestionSchema,
+  mediaAnalysisSchema,
+  timelineSchema,
+  type AgentRunContext,
+} from '@agent-edit/validation';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { request } from './client';
@@ -25,11 +31,29 @@ export function useAgentRuns(projectId: string, timelineId: string) {
   });
 }
 
-export const createAgentRun = (projectId: string, timelineId: string, instruction: string) =>
+export const createAgentRun = (
+  projectId: string,
+  timelineId: string,
+  instruction: string,
+  context: AgentRunContext,
+) =>
   request('POST', base(projectId, timelineId), {
     schema: agentRunSchema,
-    body: { instruction },
+    body: { instruction, context },
   });
+
+/** Keyed by revision, because each suggestion's numbers are measured against the current edit. */
+export function useAgentSuggestions(projectId: string, timelineId: string, revision: number) {
+  return useQuery({
+    queryKey: ['agent-suggestions', timelineId, revision],
+    queryFn: () =>
+      request('GET', `/projects/${projectId}/timelines/${timelineId}/agent-suggestions`, {
+        schema: z.object({ items: z.array(agentSuggestionSchema) }),
+      }),
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
+  });
+}
 
 export const rejectAgentRun = (projectId: string, timelineId: string, runId: string) =>
   request('POST', `${base(projectId, timelineId)}/${runId}/reject`, { schema: agentRunSchema });

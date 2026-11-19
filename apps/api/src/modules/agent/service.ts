@@ -1,4 +1,4 @@
-import { buildShortOperations, compilePlan } from '@agent-edit/ai-engine';
+import { assessPlan, buildShortOperations, compilePlan, suggestEdits } from '@agent-edit/ai-engine';
 import {
   loadAgentContext,
   publishEvent,
@@ -7,7 +7,7 @@ import {
   type MediaQueues,
 } from '@agent-edit/infra';
 import { newId } from '@agent-edit/shared';
-import type { AgentRun, Timeline } from '@agent-edit/validation';
+import type { AgentRun, AgentRunContext, AgentSuggestion, Timeline } from '@agent-edit/validation';
 import type { Redis } from 'ioredis';
 import { AppError } from '../../errors.js';
 import type { ProjectService } from '../projects/service.js';
@@ -26,6 +26,7 @@ function toRun(doc: AgentRunDoc): AgentRun {
     ops: doc.ops,
     shorts: doc.shorts,
     warnings: doc.warnings,
+    impact: doc.impact ?? null,
     provider: doc.provider,
     error: doc.error,
     createdAt: doc.createdAt.toISOString(),
@@ -77,6 +78,7 @@ export class AgentService {
     projectId: string,
     timelineId: string,
     instruction: string,
+    context: AgentRunContext | null = null,
   ): Promise<AgentRun> {
     const timeline = await this.timelines.get(ownerId, projectId, timelineId);
     const active = await this.database.agentRuns.countDocuments({
@@ -101,6 +103,9 @@ export class AgentService {
       ops: [],
       shorts: [],
       warnings: [],
+      impact: null,
+      context,
+      editorial: [],
       provider: null,
       error: null,
       appliedTransactionId: null,
@@ -121,6 +126,16 @@ export class AgentService {
       .limit(50)
       .toArray();
     return docs.map(toRun);
+  }
+
+  async suggestions(
+    ownerId: string,
+    projectId: string,
+    timelineId: string,
+  ): Promise<AgentSuggestion[]> {
+    const timeline = await this.timelines.get(ownerId, projectId, timelineId);
+    const context = await loadAgentContext(this.database, timeline);
+    return suggestEdits(timeline, context.compile, context.media);
   }
 
   private async find(ownerId: string, projectId: string, timelineId: string, runId: string) {
@@ -176,6 +191,8 @@ export class AgentService {
     }
 
     const context = await loadAgentContext(this.database, timeline);
+    // The lines a model chose when planning, so applying makes the same cut it proposed.
+    context.compile.editorialKeep = doc.editorial ?? [];
     const compiled = compilePlan(
       doc.plan,
       timeline,
@@ -255,6 +272,7 @@ export class AgentService {
       steps: compiled.steps,
       ops: compiled.ops,
       shorts: compiled.shorts,
+      impact: assessPlan(timeline, compiled, doc.plan).impact,
       updatedAt: now,
     };
     await this.database.agentRuns.updateOne({ _id: runId }, { $set: applied });

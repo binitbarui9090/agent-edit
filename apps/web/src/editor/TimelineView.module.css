@@ -1,210 +1,386 @@
 .timeline {
   display: flex;
+  flex-direction: column;
   min-height: 0;
-  min-width: 0;
+  height: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   background: var(--bg-1);
-  border-top: 1px solid var(--line);
   user-select: none;
+}
+
+.toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 44px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tools,
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--line-strong);
+}
+
+.count {
+  margin-right: 10px;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.zoomSlider {
+  width: 110px;
+  height: 16px;
+  appearance: none;
+  background: none;
+  cursor: pointer;
+}
+
+.zoomSlider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--bg-4);
+}
+
+.zoomSlider::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--text-1);
+  appearance: none;
+}
+
+.zoomSlider::-moz-range-track {
+  height: 3px;
+  background: var(--bg-4);
+}
+
+.zoomSlider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text-1);
+}
+
+.body {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .headers {
   flex: none;
-  width: 118px;
-  /* Scrolled in step with the rows from code, so a label can never sit beside the wrong track. */
+  width: 158px;
   overflow: hidden;
-  background: var(--bg-1);
   border-right: 1px solid var(--line);
+  background: var(--bg-1);
 }
 
 .corner {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  height: 24px;
-  background: var(--bg-1);
+  height: 26px;
   border-bottom: 1px solid var(--line);
 }
 
 .trackHeader {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  height: 44px;
-  padding: 0 6px 0 8px;
-  border-bottom: 1px solid var(--line);
-  border-left: 3px solid var(--track-color);
-}
-
-.headerTop {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-content: center;
   align-items: center;
-  gap: 3px;
+  column-gap: 7px;
+  row-gap: 2px;
+  padding: 0 4px 0 10px;
+  border-bottom: 1px solid var(--line);
 }
 
-.trackVolume {
-  width: 100%;
-  height: 10px;
-  margin: 0;
-  accent-color: var(--track-color);
+.trackIcon {
+  color: var(--text-3);
 }
 
 .trackName {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   color: var(--text-2);
   font-size: var(--text-sm);
-  white-space: nowrap;
+  font-weight: 500;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trackControls {
+  display: flex;
+  align-items: center;
 }
 
 .toggle {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid var(--line-strong);
-  border-radius: 2px;
-  color: var(--text-3);
-  font: 500 10px / 1 var(--font-data);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+}
+
+.toggle[data-active] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.trackVolume {
+  grid-column: 1 / -1;
+  width: calc(100% - 6px);
+  height: 12px;
+  margin: 0;
+  appearance: none;
+  background: none;
   cursor: pointer;
 }
 
-.toggle:hover {
-  color: var(--text-1);
+.trackVolume::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--bg-4);
 }
 
-.toggle[data-active='true'] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
+.trackVolume::-webkit-slider-thumb {
+  width: 8px;
+  height: 8px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--text-2);
+  appearance: none;
+  transition: background var(--fast);
+}
+
+.trackVolume:hover::-webkit-slider-thumb {
+  background: var(--text-1);
+}
+
+.trackVolume::-moz-range-track {
+  height: 2px;
+  background: var(--bg-4);
+}
+
+.trackVolume::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text-2);
 }
 
 .scroller {
+  position: relative;
   flex: 1;
   min-width: 0;
   overflow: auto;
-  position: relative;
 }
 
 .content {
   position: relative;
+  min-width: 100%;
   min-height: 100%;
 }
 
 .ruler {
   position: sticky;
   top: 0;
-  z-index: 4;
-  height: 24px;
-  background: var(--bg-2);
+  z-index: 3;
+  height: 26px;
+  overflow: hidden;
   border-bottom: 1px solid var(--line);
+  background: var(--bg-1);
   cursor: ew-resize;
+}
+
+.ticks {
+  position: absolute;
+  inset: auto 0 0;
+  height: 5px;
+  background-image: linear-gradient(to right, var(--line-strong) 1px, transparent 1px);
+  background-repeat: repeat-x;
+  pointer-events: none;
 }
 
 .mark {
   position: absolute;
   top: 0;
   bottom: 0;
-  padding: 7px 0 0 4px;
+  padding: 4px 0 0 8px;
   border-left: 1px solid var(--line-strong);
   color: var(--text-3);
-  font: 400 10px / 1 var(--font-data);
+  font: 400 10px var(--font-data);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;
 }
 
 .row {
   position: relative;
-  height: 44px;
   border-bottom: 1px solid var(--line);
-}
-
-/* One colour per track type: the same in the header and on its clips. */
-[data-track-type='VIDEO'] {
-  --track-color: #4f7fb8;
-}
-[data-track-type='BROLL'] {
-  --track-color: #4c9a8a;
-}
-[data-track-type='OVERLAYS'] {
-  --track-color: #8f7bc4;
-}
-[data-track-type='AUDIO'] {
-  --track-color: #5f9c5f;
-}
-[data-track-type='MUSIC'] {
-  --track-color: #b98a4b;
-}
-[data-track-type='CAPTIONS'] {
-  --track-color: #9a9fa8;
 }
 
 .clip {
   position: absolute;
-  top: 3px;
-  bottom: 3px;
+  top: 1px;
+  bottom: 1px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--track-color) 42%, var(--bg-1));
-  border: 1px solid var(--track-color);
-  border-radius: 2px;
+  border-radius: 5px;
+  background: var(--track-video);
+  color: var(--text-1);
   cursor: grab;
-  touch-action: none;
+  transition: filter var(--fast);
 }
 
-.clip[data-selected='true'] {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+.clip:hover {
+  filter: brightness(1.12);
 }
 
-.clip[data-proposed='true'] {
-  box-shadow: inset 0 0 0 2px #a897ff;
+.clip:active {
+  cursor: grabbing;
+}
+
+.clip[data-track-type='BROLL'] {
+  background: var(--track-broll);
+}
+
+.clip[data-track-type='OVERLAYS'] {
+  background: var(--track-overlays);
+}
+
+.clip[data-track-type='CAPTIONS'] {
+  background: var(--track-captions);
+}
+
+.clip[data-track-type='AUDIO'] {
+  background: var(--track-audio);
+  color: var(--wave-audio);
+}
+
+.clip[data-track-type='MUSIC'] {
+  background: var(--track-music);
+  color: var(--wave-music);
 }
 
 .clip[data-enabled='false'] {
   opacity: 0.4;
 }
 
-.clip[data-invalid='true'] {
-  background: var(--danger-bg);
-  border-color: var(--danger);
+/* Above the filmstrip, which would paint over an inset shadow on the clip itself. */
+.clip::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 12%);
+  pointer-events: none;
 }
 
-.clipLabel {
+.clip[data-selected='true'] {
+  z-index: 2;
+}
+
+.clip[data-selected='true']::after {
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
+.clip[data-proposed='true']::after {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent-wash);
+}
+
+.clip[data-invalid='true']::after {
+  box-shadow: inset 0 0 0 2px var(--danger);
+}
+
+.filmstrip {
   position: absolute;
-  top: 2px;
-  left: 6px;
-  right: 6px;
+  inset: 0;
   overflow: hidden;
-  color: var(--text-1);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-  text-overflow: ellipsis;
   pointer-events: none;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
+}
+
+.tile {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.88;
 }
 
 .waveform {
   position: absolute;
-  top: 0;
+  bottom: 0;
   height: 100%;
-  color: color-mix(in srgb, var(--track-color) 70%, white);
-  opacity: 0.55;
+  color: inherit;
   pointer-events: none;
+}
+
+.clip[data-track-type='VIDEO'] .waveform {
+  height: 24px;
+  color: var(--wave-video);
+  background: linear-gradient(to top, rgb(0 0 0 / 62%), rgb(0 0 0 / 28%));
+}
+
+.clipLabel {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 10px);
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgb(8 9 11 / 62%);
+  color: var(--text-1);
+  font-size: 10.5px;
+  line-height: 16px;
+  pointer-events: none;
+}
+
+.clip[data-track-type='CAPTIONS'] .clipLabel {
+  top: 3px;
+  background: none;
+  padding: 0;
+}
+
+.clipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipSpeed {
+  flex: none;
+  color: var(--warning);
+  font-family: var(--font-data);
 }
 
 .handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 7px;
+  z-index: 3;
+  width: 8px;
   cursor: ew-resize;
-}
-
-.handle:hover {
-  background: rgb(232 165 63 / 60%);
+  transition: background var(--fast);
 }
 
 .handleStart {
@@ -215,6 +391,10 @@
   right: 0;
 }
 
+.clip:hover .handle {
+  background: rgb(255 255 255 / 22%);
+}
+
 .playhead {
   position: absolute;
   top: 0;
@@ -222,9 +402,9 @@
   left: 0;
   z-index: 5;
   width: 1px;
-  background: var(--accent);
+  background: #fff;
+  box-shadow: 0 0 6px rgb(0 0 0 / 80%);
   pointer-events: none;
-  will-change: transform;
 }
 
 .playhead::before {
@@ -233,7 +413,23 @@
   top: 0;
   left: -5px;
   width: 11px;
-  height: 8px;
-  background: var(--accent);
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  height: 14px;
+  border-radius: 3px 3px 6px 6px;
+  background: #fff;
+}
+
+.emptyHint {
+  position: absolute;
+  inset: 26px 0 0 158px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-2);
+  pointer-events: none;
+}
+
+.emptyHint > * {
+  pointer-events: auto;
 }

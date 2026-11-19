@@ -32,6 +32,9 @@ interface EditorState {
   /** An agent proposal shown on the timeline without being applied. */
   previewRunId: string | null;
   previewClipIds: ReadonlySet<string>;
+  snapping: boolean;
+  /** Bumped when a clip is picked on the timeline, which brings its properties into view. */
+  inspectRequest: number;
 }
 
 export const useEditor = create<EditorState>(() => ({
@@ -43,6 +46,8 @@ export const useEditor = create<EditorState>(() => ({
   error: null,
   previewRunId: null,
   previewClipIds: new Set(),
+  snapping: true,
+  inspectRequest: 0,
 }));
 
 let confirmed: Timeline | null = null;
@@ -244,6 +249,14 @@ export function setZoom(pxPerSecond: number): void {
   useEditor.setState({
     pxPerSecond: Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, pxPerSecond)),
   });
+}
+
+export function toggleSnapping(): void {
+  useEditor.setState((state) => ({ snapping: !state.snapping }));
+}
+
+export function requestInspect(): void {
+  useEditor.setState((state) => ({ inspectRequest: state.inspectRequest + 1 }));
 }
 
 export function clearEditorError(): void {

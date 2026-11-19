@@ -68,6 +68,9 @@ export class ProjectService {
       }>([
         { $match: { projectId: { $in: projectIds }, deletedAt: null } },
         {
+          $addFields: { hasPoster: { $cond: [{ $ifNull: ['$storage.posterKey', false] }, 1, 0] } },
+        },
+        {
           $group: {
             _id: '$projectId',
             total: { $sum: 1 },
@@ -75,7 +78,10 @@ export class ProjectService {
             processing: count('processing'),
             uploading: count('uploading'),
             failed: count('failed'),
-            posterKey: { $min: '$storage.posterKey' },
+            // The first file added is usually what the project is about, rather than its B-roll.
+            posterKey: {
+              $top: { sortBy: { hasPoster: -1, createdAt: 1 }, output: '$storage.posterKey' },
+            },
           },
         },
       ])

@@ -89,7 +89,10 @@ for (const name of ['Podcast ep. 14', 'Product launch cut']) {
 }
 await page.goto(BASE);
 await page.getByRole('link', { name: 'Product launch cut' }).waitFor();
-const names = await page.locator('tbody a').allTextContents();
+const names = await page
+  .getByRole('list', { name: 'Projects' })
+  .getByRole('link')
+  .allTextContents();
 ok(
   'most recently modified first',
   names[0] === 'Product launch cut' && names[2] === 'Conference talk v2',

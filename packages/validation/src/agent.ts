@@ -7,6 +7,7 @@ import { speedSchema, trackTypeSchema, volumeSchema } from './timeline.js';
 export const PLAN_OPERATIONS = [
   'remove_silence',
   'remove_repeated_takes',
+  'remove_filler_words',
   'cut_range',
   'speed_range',
   'cut_to_duration',
@@ -41,15 +42,17 @@ export const planStepSchema = z.object({
   /** Seconds on the timeline. */
   start: z.number().nullable(),
   end: z.number().nullable(),
-  speed: speedSchema.nullable(),
-  volume: volumeSchema.nullable(),
+  // Models fill fields a step does not use with zeros. An impossible value counts as not given, and
+  // a step that needed it then fails on its own rather than sinking the whole plan.
+  speed: speedSchema.nullable().catch(null),
+  volume: volumeSchema.nullable().catch(null),
   trackType: trackTypeSchema.nullable(),
   /** What to look for, such as the subject of B-roll or the mood of music. */
   query: z.string().max(200).nullable(),
   mediaId: z.string().nullable(),
-  count: z.number().int().min(1).max(10).nullable(),
+  count: z.number().int().min(1).max(10).nullable().catch(null),
   /** A target length, or the minimum pause worth removing. */
-  seconds: z.number().positive().nullable(),
+  seconds: z.number().positive().nullable().catch(null),
 });
 export type PlanStep = z.infer<typeof planStepSchema>;
 
@@ -66,6 +69,8 @@ export const compiledPlanStepSchema = z.object({
   /** What this step will do, stated from what the compiler found rather than what the model said. */
   summary: z.string(),
   operationCount: z.number().int().nonnegative(),
+  /** How much shorter this step makes the edit, measured. Negative if it gets longer. */
+  secondsSaved: z.number().default(0),
   /** Why the step cannot apply. Nothing from it enters the plan. */
   error: z.string().nullable(),
 });
@@ -88,6 +93,8 @@ export const AGENT_RUN_STATUSES = [
   'queued',
   'planning',
   'proposed',
+  /** A question was answered, or there was nothing to edit. Nothing awaits review. */
+  'answered',
   'applied',
   'rejected',
   'stale',
@@ -95,6 +102,26 @@ export const AGENT_RUN_STATUSES = [
 ] as const;
 export const agentRunStatusSchema = z.enum(AGENT_RUN_STATUSES);
 export type AgentRunStatus = z.infer<typeof agentRunStatusSchema>;
+
+/** What the creator was looking at when they asked, so "this clip" and "here" mean something. */
+export const agentRunContextSchema = z.strictObject({
+  selectedClipIds: z.array(z.string().max(64)).max(50),
+  playheadSeconds: z.number().nonnegative(),
+});
+export type AgentRunContext = z.infer<typeof agentRunContextSchema>;
+
+export const agentImpactSchema = z.object({
+  beforeSeconds: z.number().nonnegative(),
+  afterSeconds: z.number().nonnegative(),
+});
+export type AgentImpact = z.infer<typeof agentImpactSchema>;
+
+export const agentSuggestionSchema = z.object({
+  id: planOperationSchema,
+  label: z.string(),
+  instruction: z.string(),
+});
+export type AgentSuggestion = z.infer<typeof agentSuggestionSchema>;
 
 export const agentRunSchema = z.object({
   id: idSchema(ID_PREFIXES.agentRun),
@@ -108,6 +135,7 @@ export const agentRunSchema = z.object({
   ops: z.array(timelineOperationSchema),
   shorts: z.array(shortProposalSchema),
   warnings: z.array(z.string()),
+  impact: agentImpactSchema.nullable().default(null),
   provider: z
     .object({ id: z.string(), model: z.string().nullable(), isMock: z.boolean() })
     .nullable(),
@@ -119,6 +147,7 @@ export type AgentRun = z.infer<typeof agentRunSchema>;
 
 export const createAgentRunRequestSchema = z.strictObject({
   instruction: z.string().trim().min(1, 'Tell the agent what to do').max(2000),
+  context: agentRunContextSchema.optional(),
 });
 
 export const applyAgentRunRequestSchema = undoRedoRequestSchema.extend({

@@ -18,8 +18,14 @@ export async function agentRoutes(app: FastifyInstance, { agent }: { agent: Agen
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (req, reply) => {
       const { id, timelineId } = timelineParamsSchema.parse(req.params);
-      const { instruction } = createAgentRunRequestSchema.parse(req.body);
-      const run = await agent.create(currentUser(req)._id, id, timelineId, instruction);
+      const { instruction, context } = createAgentRunRequestSchema.parse(req.body);
+      const run = await agent.create(
+        currentUser(req)._id,
+        id,
+        timelineId,
+        instruction,
+        context ?? null,
+      );
       return reply.status(201).send(run);
     },
   );
@@ -27,6 +33,11 @@ export async function agentRoutes(app: FastifyInstance, { agent }: { agent: Agen
   app.get(base, async (req) => {
     const { id, timelineId } = timelineParamsSchema.parse(req.params);
     return { items: await agent.list(currentUser(req)._id, id, timelineId) };
+  });
+
+  app.get('/:id/timelines/:timelineId/agent-suggestions', async (req) => {
+    const { id, timelineId } = timelineParamsSchema.parse(req.params);
+    return { items: await agent.suggestions(currentUser(req)._id, id, timelineId) };
   });
 
   app.get(`${base}/:runId`, async (req) => {

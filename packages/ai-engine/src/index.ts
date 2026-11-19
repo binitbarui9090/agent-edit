@@ -4,3 +4,5 @@ export * from './moments.js';
 export * from './planner.js';
 export * from './providers/types.js';
 export * from './repeated-takes.js';
+export * from './suggestions.js';
+export * from './understand.js';

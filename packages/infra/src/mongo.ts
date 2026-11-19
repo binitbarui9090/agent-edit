@@ -1,6 +1,8 @@
 import type { AspectRatio, FrameRate, ProcessingStep, UploadExtension } from '@agent-edit/shared';
 import type {
+  AgentImpact,
   AgentPlan,
+  AgentRunContext,
   AgentRunStatus,
   CompiledPlanStep,
   JobStatus,
@@ -9,8 +11,8 @@ import type {
   RenderPreset,
   RenderStatus,
   ShortProposal,
-  TimelineState,
   TimelineOperation,
+  TimelineState,
   TimelineTrack,
   TransactionSource,
 } from '@agent-edit/validation';
@@ -151,6 +153,10 @@ export interface AgentRunDoc {
   ops: TimelineOperation[];
   shorts: ShortProposal[];
   warnings: string[];
+  /** Absent on runs from before these were recorded. */
+  impact?: AgentImpact | null;
+  context?: AgentRunContext | null;
+  editorial?: Array<{ mediaId: string; start: number; end: number }>;
   provider: ProviderRef | null;
   error: string | null;
   appliedTransactionId: string | null;

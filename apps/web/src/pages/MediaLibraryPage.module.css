@@ -8,14 +8,15 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   background: var(--bg-1);
   border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
   transition: border-color var(--fast);
 }
 
 .drop[data-dragging='true'] {
-  background: rgb(232 165 63 / 8%);
+  background: var(--accent-wash);
   border-color: var(--accent);
 }
 
@@ -88,4 +89,10 @@
 
 .more {
   margin-top: 12px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
 }

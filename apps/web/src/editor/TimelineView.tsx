@@ -11,6 +11,7 @@ import {
 } from '@agent-edit/timeline-engine';
 import type {
   MediaAsset,
+  MediaPlayback,
   TimelineClip,
   TimelineOperation,
   TimelineState,
@@ -26,14 +27,65 @@ import {
   useState,
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
+import {
+  Captions,
+  Clapperboard,
+  Film,
+  Layers,
+  Lock,
+  LockOpen,
+  Magnet,
+  Maximize2,
+  Mic,
+  Minus,
+  Music,
+  Plus,
+  Scissors,
+  SquareX,
+  Trash2,
+  Type,
+  Volume2,
+  VolumeX,
+  type LucideIcon,
+} from 'lucide-react';
+import { IconButton } from '../components/Button';
 import { useEditorContext } from './EditorContext';
-import { commitEdit, selectClips, setZoom, toggleClip, useEditor } from './store';
+import {
+  MAX_PX_PER_SECOND,
+  MIN_PX_PER_SECOND,
+  commitEdit,
+  requestInspect,
+  selectClips,
+  setZoom,
+  toggleClip,
+  toggleSnapping,
+  useEditor,
+} from './store';
 import { formatRulerLabel, pxToTicks, rulerStep, snap, ticksToPx } from './time';
 import { useWaveformPeaks } from './waveforms';
 import styles from './TimelineView.module.css';
 
-const ROW_HEIGHT = 44;
+const ROW_HEIGHTS: Readonly<Record<TimelineTrack['type'], number>> = {
+  VIDEO: 76,
+  BROLL: 54,
+  OVERLAYS: 40,
+  CAPTIONS: 30,
+  AUDIO: 44,
+  MUSIC: 44,
+};
+const TRACK_ICONS: Readonly<Record<TimelineTrack['type'], LucideIcon>> = {
+  VIDEO: Film,
+  BROLL: Clapperboard,
+  OVERLAYS: Layers,
+  CAPTIONS: Captions,
+  AUDIO: Mic,
+  MUSIC: Music,
+};
+const WAVE_ONLY: ReadonlySet<TimelineTrack['type']> = new Set(['AUDIO', 'MUSIC']);
+const THUMBNAIL_ASPECT = 16 / 9;
+const MIN_LABEL_WIDTH_PX = 44;
 const OVERSCAN_PX = 400;
 const TRAILING_SPACE_PX = 600;
 const CHUNK_PX = 256;
@@ -83,12 +135,13 @@ function resolveMove(
   targetTrackId: string,
   playhead: number,
   pxPerSecond: number,
+  snapping: boolean,
 ): { delta: number; valid: boolean; ops: TimelineOperation[] } {
   const moving = new Set(clipIds);
   const anchor = findClip(state, anchorId);
   if (!anchor) return { delta: 0, valid: false, ops: [] };
 
-  const targets = snapTargets(state, playhead, moving);
+  const targets = snapping ? snapTargets(state, playhead, moving) : [];
   const startSnap = snap(anchor.clip.start + rawDelta, targets, pxPerSecond);
   const endSnap = snap(clipEnd(anchor.clip) + rawDelta, targets, pxPerSecond);
   let delta = rawDelta;
@@ -152,6 +205,7 @@ function Waveform({
     context.scale(ratio, ratio);
     context.fillStyle = getComputedStyle(element).color;
     const middle = height / 2;
+    context.clearRect(0, 0, width, height);
     const pairs = peaks.length / 2;
     const sourceStart = ticksToSeconds(clip.sourceIn);
     const secondsPerPx = clip.speed / pxPerSecond;
@@ -179,6 +233,53 @@ function Waveform({
       style={{ left: visibleFromPx, width }}
       aria-hidden="true"
     />
+  );
+}
+
+/** Tiles sized to the row, each showing the nearest of the source's evenly spaced thumbnails. */
+function Filmstrip({
+  clip,
+  info,
+  height,
+  pxPerSecond,
+  visibleFromPx,
+  visibleToPx,
+}: {
+  clip: Extract<TimelineClip, { kind: 'media' }>;
+  info: MediaPlayback | undefined;
+  height: number;
+  pxPerSecond: number;
+  visibleFromPx: number;
+  visibleToPx: number;
+}) {
+  const urls = info?.thumbnailUrls ?? [];
+  const sourceSeconds = info?.probe ? ticksToSeconds(info.probe.duration) : 0;
+  if (urls.length === 0 || sourceSeconds === 0) return null;
+  const aspect = info?.probe ? info.probe.width / info.probe.height : THUMBNAIL_ASPECT;
+  const tile = Math.max(24, Math.round(height * aspect));
+  const first = Math.floor(visibleFromPx / tile);
+  const last = Math.ceil(visibleToPx / tile);
+  const tiles: ReactNode[] = [];
+  for (let index = first; index < last; index++) {
+    const centre =
+      ticksToSeconds(clip.sourceIn) + ((index + 0.5) * tile * clip.speed) / pxPerSecond;
+    const nearest = Math.floor((centre / sourceSeconds) * urls.length);
+    const url = urls[Math.max(0, Math.min(urls.length - 1, nearest))];
+    tiles.push(
+      <img
+        key={index}
+        src={url}
+        alt=""
+        draggable={false}
+        className={styles.tile}
+        style={{ left: index * tile, width: tile }}
+      />,
+    );
+  }
+  return (
+    <div className={styles.filmstrip} aria-hidden="true">
+      {tiles}
+    </div>
   );
 }
 
@@ -219,6 +320,8 @@ const ClipView = memo(function ClipView({
   const speed = clip.kind === 'media' && clip.speed !== 1 ? ` ${clip.speed.toFixed(2)}x` : '';
   const visibleFromPx = Math.max(0, viewFromPx - left);
   const visibleToPx = Math.min(width, viewToPx - left);
+  const { playback } = useEditorContext();
+  const pictured = clip.kind === 'media' && !WAVE_ONLY.has(track.type);
 
   return (
     <div
@@ -237,7 +340,17 @@ const ClipView = memo(function ClipView({
       style={{ left, width }}
       onPointerDown={(event) => onPointerDown(event, clip, 'body')}
     >
-      {clip.kind === 'media' && track.type !== 'OVERLAYS' && (
+      {clip.kind === 'media' && pictured && (
+        <Filmstrip
+          clip={clip}
+          info={playback.get(clip.sourceMediaId)}
+          height={ROW_HEIGHTS[track.type] - 2}
+          pxPerSecond={pxPerSecond}
+          visibleFromPx={visibleFromPx}
+          visibleToPx={visibleToPx}
+        />
+      )}
+      {clip.kind === 'media' && (track.type === 'VIDEO' || WAVE_ONLY.has(track.type)) && (
         <Waveform
           clip={clip}
           pxPerSecond={pxPerSecond}
@@ -245,10 +358,13 @@ const ClipView = memo(function ClipView({
           visibleToPx={visibleToPx}
         />
       )}
-      <span className={styles.clipLabel}>
-        {label}
-        {speed}
-      </span>
+      {width >= MIN_LABEL_WIDTH_PX && (
+        <span className={styles.clipLabel}>
+          {clip.kind === 'caption' && <Type size={11} aria-hidden="true" />}
+          <span className={styles.clipName}>{label}</span>
+          {speed && <span className={styles.clipSpeed}>{speed.trim()}</span>}
+        </span>
+      )}
       {!track.locked && (
         <>
           <span
@@ -322,8 +438,10 @@ const Ruler = memo(function Ruler({
   const first = Math.floor(fromPx / pxPerSecond / step) * step;
   const marks: number[] = [];
   for (let seconds = first; seconds * pxPerSecond <= toPx; seconds += step) marks.push(seconds);
+  const spacing = (step * pxPerSecond) / 5;
   return (
     <>
+      <div className={styles.ticks} style={{ backgroundSize: `${spacing}px 100%` }} />
       {marks.map((seconds) => (
         <span key={seconds} className={styles.mark} style={{ left: seconds * pxPerSecond }}>
           {formatRulerLabel(seconds)}
@@ -333,8 +451,28 @@ const Ruler = memo(function Ruler({
   );
 });
 
-export function TimelineView() {
+function trackAtHeight(tracks: readonly TimelineTrack[], y: number): TimelineTrack | undefined {
+  let bottom = 0;
+  for (const track of tracks) {
+    bottom += ROW_HEIGHTS[track.type];
+    if (y < bottom) return track;
+  }
+  return tracks.at(-1);
+}
+
+export function TimelineView({
+  onSplit,
+  onDelete,
+  onAddCaption,
+  emptyHint,
+}: {
+  onSplit: () => void;
+  onDelete: (ripple: boolean) => void;
+  onAddCaption: () => void;
+  emptyHint?: ReactNode;
+}) {
   const { engine, media } = useEditorContext();
+  const snapping = useEditor((state) => state.snapping);
   const timeline = useEditor((state) => state.timeline);
   const selection = useEditor((state) => state.selection);
   const pxPerSecond = useEditor((state) => state.pxPerSecond);
@@ -411,6 +549,7 @@ export function TimelineView() {
         return;
       }
       if (!wasSelected) selectClips([clip.id]);
+      requestInspect();
       const dragging = part === 'body' && wasSelected ? [...state.selection] : [clip.id];
       if (located.track.locked) return;
 
@@ -435,10 +574,10 @@ export function TimelineView() {
         moved = true;
         const rawTicks = pxToTicks(dx, scale);
         if (part === 'body') {
-          const rowIndex = Math.floor(
-            (move.clientY - rect.top + element.scrollTop - RULER_HEIGHT) / ROW_HEIGHT,
+          const row = trackAtHeight(
+            current.tracks,
+            move.clientY - rect.top + element.scrollTop - RULER_HEIGHT,
           );
-          const row = current.tracks[Math.max(0, Math.min(current.tracks.length - 1, rowIndex))];
           const result = resolveMove(
             current,
             dragging,
@@ -447,6 +586,7 @@ export function TimelineView() {
             row?.id ?? located.track.id,
             engine.time,
             scale,
+            useEditor.getState().snapping,
           );
           latestOps = result.valid ? result.ops : [];
           setGesture({
@@ -458,7 +598,9 @@ export function TimelineView() {
             valid: result.valid,
           });
         } else {
-          const targets = snapTargets(current, engine.time, new Set([clip.id]));
+          const targets = useEditor.getState().snapping
+            ? snapTargets(current, engine.time, new Set([clip.id]))
+            : [];
           const raw = (part === 'start' ? clip.start : clipEnd(clip)) + rawTicks;
           const snapped = snap(raw, targets, scale).time;
           // Trimming may not run into a neighbour on the same track.
@@ -508,6 +650,26 @@ export function TimelineView() {
     },
     [engine],
   );
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target;
+      const typing =
+        target instanceof HTMLElement &&
+        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+      if (typing || event.metaKey || event.ctrlKey || !event.shiftKey) return;
+      if (event.key.toLowerCase() !== 'z') return;
+      const element = scroller.current;
+      const { timeline: current } = useEditor.getState();
+      if (!element || !current) return;
+      const total = timelineDuration(current);
+      if (total === 0) return;
+      setZoom((element.clientWidth - 40) / ticksToSeconds(total));
+      element.scrollLeft = 0;
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const engineMedia = useRef(media);
   engineMedia.current = media;
@@ -568,151 +730,239 @@ export function TimelineView() {
 
   if (!timeline) return null;
 
-  const trackVolumes = (track: TimelineTrack) => {
+  const toggleMute = (track: TimelineTrack) => {
     const ops: TimelineOperation[] = [
       { op: 'update_track', trackId: track.id, muted: !track.muted },
     ];
     commitEdit(ops, `${track.muted ? 'Unmute' : 'Mute'} ${track.name}`);
   };
-  const trackLock = (track: TimelineTrack) => {
+  const toggleLock = (track: TimelineTrack) => {
     const ops: TimelineOperation[] = [
       { op: 'update_track', trackId: track.id, locked: !track.locked },
     ];
     commitEdit(ops, `${track.locked ? 'Unlock' : 'Lock'} ${track.name}`);
   };
 
+  function fitToWindow() {
+    const element = scroller.current;
+    if (!element || duration === 0) return;
+    setZoom((element.clientWidth - 40) / ticksToSeconds(duration));
+    element.scrollLeft = 0;
+  }
+
+  const hasSelection = selection.length > 0;
+  const empty = timeline.tracks.every((track) => track.clips.length === 0);
+
   return (
     <section className={styles.timeline} aria-label="Timeline">
-      <div ref={headers} className={styles.headers}>
-        <div className={styles.corner} />
-        {timeline.tracks.map((track) => (
-          <div
-            key={track.id}
-            className={styles.trackHeader}
-            data-track-type={track.type}
-            data-header-track={track.type}
-          >
-            <div className={styles.headerTop}>
-              <span className={styles.trackName}>{track.name}</span>
-              {track.type !== 'CAPTIONS' && (
-                <button
-                  type="button"
-                  className={styles.toggle}
-                  data-active={track.muted}
-                  aria-pressed={track.muted}
-                  aria-label={`Mute ${track.name}`}
-                  onClick={() => trackVolumes(track)}
-                >
-                  M
-                </button>
-              )}
-              <button
-                type="button"
-                className={styles.toggle}
-                data-active={track.locked}
-                aria-pressed={track.locked}
-                aria-label={`Lock ${track.name}`}
-                onClick={() => trackLock(track)}
-              >
-                L
-              </button>
-            </div>
-            {track.type !== 'CAPTIONS' && <TrackVolume track={track} />}
-          </div>
-        ))}
+      <div className={styles.toolbar}>
+        <div className={styles.tools}>
+          <IconButton icon={Scissors} label="Split" shortcut="S" onClick={onSplit} />
+          <IconButton
+            icon={Trash2}
+            label="Delete"
+            shortcut="⌫"
+            disabled={!hasSelection}
+            onClick={() => onDelete(false)}
+          />
+          <IconButton
+            icon={SquareX}
+            label="Ripple delete"
+            shortcut="⇧⌫"
+            disabled={!hasSelection}
+            onClick={() => onDelete(true)}
+          />
+          <span className={styles.divider} />
+          <IconButton icon={Type} label="Add caption" shortcut="C" onClick={onAddCaption} />
+          <span className={styles.divider} />
+          <IconButton
+            icon={Magnet}
+            label={snapping ? 'Snapping on' : 'Snapping off'}
+            shortcut="N"
+            active={snapping}
+            aria-pressed={snapping}
+            onClick={toggleSnapping}
+          />
+        </div>
+        <div className={styles.zoom}>
+          {hasSelection && <span className={styles.count}>{selection.length} selected</span>}
+          <IconButton
+            icon={Minus}
+            label="Zoom out"
+            shortcut="−"
+            onClick={() => setZoom(pxPerSecond / 1.5)}
+          />
+          <input
+            type="range"
+            aria-label="Zoom"
+            className={styles.zoomSlider}
+            min={Math.log(MIN_PX_PER_SECOND)}
+            max={Math.log(MAX_PX_PER_SECOND)}
+            step={0.01}
+            value={Math.log(pxPerSecond)}
+            onChange={(event) => setZoom(Math.exp(Number(event.target.value)))}
+          />
+          <IconButton
+            icon={Plus}
+            label="Zoom in"
+            shortcut="+"
+            onClick={() => setZoom(pxPerSecond * 1.5)}
+          />
+          <IconButton
+            icon={Maximize2}
+            label="Fit to window"
+            shortcut="⇧Z"
+            disabled={duration === 0}
+            onClick={fitToWindow}
+          />
+        </div>
       </div>
-      <div
-        ref={scroller}
-        className={styles.scroller}
-        data-testid="timeline-scroller"
-        onWheel={onWheel}
-        onScroll={(event) => {
-          const { scrollLeft: left, scrollTop } = event.currentTarget;
-          if (headers.current) headers.current.scrollTop = scrollTop;
-          setView((current) => (current.left === left ? current : { ...current, left }));
-        }}
-        onPointerDown={(event) => {
-          if (event.target === event.currentTarget) selectClips([]);
-        }}
-      >
-        <div className={styles.content} style={{ width: contentWidth }}>
-          <div className={styles.ruler} data-testid="ruler" onPointerDown={seekFromPointer}>
-            <Ruler pxPerSecond={pxPerSecond} fromPx={Math.max(0, fromPx)} toPx={toPx} />
-          </div>
+      <div className={styles.body}>
+        <div ref={headers} className={styles.headers}>
+          <div className={styles.corner} />
           {timeline.tracks.map((track) => {
-            const clips = clipsInRange(track.clips, rangeFrom, rangeTo);
-            const moveInto =
-              gesture?.kind === 'move' &&
-              gesture.targetTrackId === track.id &&
-              gesture.clipIds.length === 1
-                ? findClip(timeline, gesture.clipIds[0]!)
-                : null;
+            const Icon = TRACK_ICONS[track.type];
             return (
               <div
                 key={track.id}
-                className={styles.row}
+                className={styles.trackHeader}
                 data-track-type={track.type}
-                data-testid={`track-${track.type}`}
-                onPointerDown={(event) => {
-                  if (event.target === event.currentTarget) selectClips([]);
-                }}
-                onDragOver={(event) => {
-                  if (event.dataTransfer.types.includes(MEDIA_DRAG_TYPE)) event.preventDefault();
-                }}
-                onDrop={(event) => dropMedia(event, track)}
+                data-header-track={track.type}
+                style={{ height: ROW_HEIGHTS[track.type] }}
               >
-                {clips.map((clip) => {
-                  const movingAway =
-                    gesture?.kind === 'move' &&
-                    gesture.clipIds.length === 1 &&
-                    gesture.clipIds[0] === clip.id &&
-                    gesture.targetTrackId !== track.id;
-                  if (movingAway) return null;
-                  let shown = clip;
-                  if (gesture?.kind === 'trim' && gesture.clipId === clip.id) {
-                    shown = { ...clip, start: gesture.op.start, duration: gesture.op.duration };
-                  }
-                  const inMove = gesture?.kind === 'move' && gesture.clipIds.includes(clip.id);
-                  return (
-                    <ClipView
-                      key={clip.id}
-                      clip={shown}
-                      track={track}
-                      label={clipLabel(clip, media)}
-                      pxPerSecond={pxPerSecond}
-                      selected={selected.has(clip.id)}
-                      proposed={proposedClips.has(clip.id)}
-                      deltaTicks={inMove ? gesture.deltaTicks : 0}
-                      invalid={inMove ? !gesture.valid : false}
-                      viewFromPx={chunkFrom}
-                      viewToPx={chunkTo}
-                      onPointerDown={handleClipPointer}
+                <Icon
+                  size={13}
+                  strokeWidth={1.75}
+                  className={styles.trackIcon}
+                  aria-hidden="true"
+                />
+                <span className={styles.trackName}>{track.name}</span>
+                <div className={styles.trackControls}>
+                  {track.type !== 'CAPTIONS' && (
+                    <IconButton
+                      icon={track.muted ? VolumeX : Volume2}
+                      size={13}
+                      className={styles.toggle}
+                      active={track.muted}
+                      tipSide="right"
+                      aria-pressed={track.muted}
+                      label={`Mute ${track.name}`}
+                      onClick={() => toggleMute(track)}
                     />
-                  );
-                })}
-                {moveInto && moveInto.track.id !== track.id && gesture?.kind === 'move' && (
-                  <ClipView
-                    clip={moveInto.clip}
-                    track={track}
-                    label={clipLabel(moveInto.clip, media)}
-                    pxPerSecond={pxPerSecond}
-                    selected
-                    proposed={false}
-                    deltaTicks={gesture.deltaTicks}
-                    invalid={!gesture.valid}
-                    viewFromPx={chunkFrom}
-                    viewToPx={chunkTo}
-                    onPointerDown={handleClipPointer}
+                  )}
+                  <IconButton
+                    icon={track.locked ? Lock : LockOpen}
+                    size={13}
+                    className={styles.toggle}
+                    active={track.locked}
+                    tipSide="right"
+                    aria-pressed={track.locked}
+                    label={`Lock ${track.name}`}
+                    onClick={() => toggleLock(track)}
                   />
+                </div>
+                {ROW_HEIGHTS[track.type] >= 44 && track.type !== 'CAPTIONS' && (
+                  <TrackVolume track={track} />
                 )}
               </div>
             );
           })}
-          <div ref={playhead} className={styles.playhead} data-testid="playhead" />
         </div>
+        <div
+          ref={scroller}
+          className={styles.scroller}
+          data-testid="timeline-scroller"
+          onWheel={onWheel}
+          onScroll={(event) => {
+            const { scrollLeft: left, scrollTop } = event.currentTarget;
+            if (headers.current) headers.current.scrollTop = scrollTop;
+            setView((current) => (current.left === left ? current : { ...current, left }));
+          }}
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) selectClips([]);
+          }}
+        >
+          <div className={styles.content} style={{ width: contentWidth }}>
+            <div className={styles.ruler} data-testid="ruler" onPointerDown={seekFromPointer}>
+              <Ruler pxPerSecond={pxPerSecond} fromPx={Math.max(0, fromPx)} toPx={toPx} />
+            </div>
+            {timeline.tracks.map((track) => {
+              const clips = clipsInRange(track.clips, rangeFrom, rangeTo);
+              const moveInto =
+                gesture?.kind === 'move' &&
+                gesture.targetTrackId === track.id &&
+                gesture.clipIds.length === 1
+                  ? findClip(timeline, gesture.clipIds[0]!)
+                  : null;
+              return (
+                <div
+                  key={track.id}
+                  className={styles.row}
+                  data-track-type={track.type}
+                  data-testid={`track-${track.type}`}
+                  style={{ height: ROW_HEIGHTS[track.type] }}
+                  onPointerDown={(event) => {
+                    if (event.target === event.currentTarget) selectClips([]);
+                  }}
+                  onDragOver={(event) => {
+                    if (event.dataTransfer.types.includes(MEDIA_DRAG_TYPE)) event.preventDefault();
+                  }}
+                  onDrop={(event) => dropMedia(event, track)}
+                >
+                  {clips.map((clip) => {
+                    const movingAway =
+                      gesture?.kind === 'move' &&
+                      gesture.clipIds.length === 1 &&
+                      gesture.clipIds[0] === clip.id &&
+                      gesture.targetTrackId !== track.id;
+                    if (movingAway) return null;
+                    let shown = clip;
+                    if (gesture?.kind === 'trim' && gesture.clipId === clip.id) {
+                      shown = { ...clip, start: gesture.op.start, duration: gesture.op.duration };
+                    }
+                    const inMove = gesture?.kind === 'move' && gesture.clipIds.includes(clip.id);
+                    return (
+                      <ClipView
+                        key={clip.id}
+                        clip={shown}
+                        track={track}
+                        label={clipLabel(clip, media)}
+                        pxPerSecond={pxPerSecond}
+                        selected={selected.has(clip.id)}
+                        proposed={proposedClips.has(clip.id)}
+                        deltaTicks={inMove ? gesture.deltaTicks : 0}
+                        invalid={inMove ? !gesture.valid : false}
+                        viewFromPx={chunkFrom}
+                        viewToPx={chunkTo}
+                        onPointerDown={handleClipPointer}
+                      />
+                    );
+                  })}
+                  {moveInto && moveInto.track.id !== track.id && gesture?.kind === 'move' && (
+                    <ClipView
+                      clip={moveInto.clip}
+                      track={track}
+                      label={clipLabel(moveInto.clip, media)}
+                      pxPerSecond={pxPerSecond}
+                      selected
+                      proposed={false}
+                      deltaTicks={gesture.deltaTicks}
+                      invalid={!gesture.valid}
+                      viewFromPx={chunkFrom}
+                      viewToPx={chunkTo}
+                      onPointerDown={handleClipPointer}
+                    />
+                  )}
+                </div>
+              );
+            })}
+            <div ref={playhead} className={styles.playhead} data-testid="playhead" />
+          </div>
+        </div>
+        {empty && emptyHint && <div className={styles.emptyHint}>{emptyHint}</div>}
       </div>
     </section>
   );
 }
 
-const RULER_HEIGHT = 24;
+const RULER_HEIGHT = 26;

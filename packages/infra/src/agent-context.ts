@@ -6,6 +6,8 @@ export interface AgentContext {
   compile: CompileContext;
   media: MediaLookup;
   repeatedTakeCount: number;
+  chapters: Array<{ mediaId: string; start: number; end: number; title: string | null }>;
+  scenes: Array<{ mediaId: string; start: number; end: number; summary: string }>;
 }
 
 /**
@@ -59,6 +61,12 @@ export async function loadAgentContext(
       return duration === undefined ? undefined : { duration };
     },
     repeatedTakeCount: moments.filter((moment) => moment.kind === 'repeated_take').length,
+    chapters: moments
+      .filter((moment) => moment.kind === 'chapter')
+      .map(({ mediaId, start, end, title }) => ({ mediaId, start, end, title })),
+    scenes: scenes.flatMap(({ mediaId, start, end, summary }) =>
+      summary ? [{ mediaId, start, end, summary }] : [],
+    ),
     compile: {
       library,
       segments: segments.map(({ mediaId, start, end, text, words }) => ({

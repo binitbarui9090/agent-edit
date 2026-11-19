@@ -407,7 +407,7 @@ ok('cancel leaves no record on the server', remaining === 0);
 
 // --- Dashboard ---
 await page.goto(BASE);
-const demo = page.getByRole('row').filter({ hasText: 'Upload demo' });
+const demo = page.getByRole('listitem').filter({ hasText: 'Upload demo' });
 await demo.getByText('3 clips').waitFor();
 ok('dashboard shows real footage count', true);
 ok(

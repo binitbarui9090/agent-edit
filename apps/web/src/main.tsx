@@ -1,7 +1,5 @@
-import '@fontsource/ibm-plex-mono/400.css';
-import '@fontsource/ibm-plex-sans/400.css';
-import '@fontsource/ibm-plex-sans/500.css';
-import '@fontsource/ibm-plex-sans/600.css';
+import '@fontsource-variable/geist/wght.css';
+import '@fontsource-variable/geist-mono/wght.css';
 import './styles/tokens.css';
 import './styles/global.css';
 import { QueryClientProvider } from '@tanstack/react-query';

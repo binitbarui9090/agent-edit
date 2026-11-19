@@ -15,12 +15,16 @@ import {
   findClip,
   firstTrackOfType,
   isRangeFree,
+  sourceToTimeline,
   speedRangeOperations,
+  spineClips,
   timelineDuration,
   trimOperation,
   type MediaLookup,
+  type SourceRange,
 } from '@agent-edit/timeline-engine';
 import type {
+  AgentImpact,
   AgentPlan,
   CompiledPlanStep,
   MediaClip,
@@ -41,11 +45,7 @@ export interface SourceSegment {
   words: ReadonlyArray<{ w: string; s: number; e: number }>;
 }
 
-export interface SourceRange {
-  mediaId: string;
-  start: number;
-  end: number;
-}
+export { sourceToTimeline, type SourceRange };
 
 export interface LibraryItem {
   id: string;
@@ -70,6 +70,8 @@ export interface CompileContext {
   silences: readonly SourceRange[];
   moments: readonly HighlightMoment[];
   library: ReadonlyMap<string, LibraryItem>;
+  /** Speech a model chose to keep when asked for a target length. Stored, so applying is repeatable. */
+  editorialKeep?: readonly SourceRange[];
 }
 
 export interface CompiledPlan {
@@ -89,33 +91,6 @@ const CAPTION_MAX_CHARS = 42;
 const BROLL_SECONDS = 4;
 const SHORT_MIN_SECONDS = 15;
 const SHORT_MAX_SECONDS = 60;
-
-/** The VIDEO track is the edit's spine: transcript and silence map onto the footage there. */
-function spineClips(state: TimelineState): MediaClip[] {
-  return (firstTrackOfType(state, 'VIDEO')?.clips ?? []).filter(
-    (clip): clip is MediaClip => clip.kind === 'media',
-  );
-}
-
-/** Where a stretch of source footage currently sits on the timeline, if it is used at all. */
-export function sourceToTimeline(
-  state: TimelineState,
-  range: SourceRange,
-): Array<{ start: number; end: number; clip: MediaClip }> {
-  const found: Array<{ start: number; end: number; clip: MediaClip }> = [];
-  for (const clip of spineClips(state)) {
-    if (clip.sourceMediaId !== range.mediaId) continue;
-    const from = Math.max(range.start, clip.sourceIn);
-    const to = Math.min(range.end, clip.sourceOut);
-    if (to <= from) continue;
-    found.push({
-      start: clip.start + (from - clip.sourceIn) / clip.speed,
-      end: clip.start + (to - clip.sourceIn) / clip.speed,
-      clip,
-    });
-  }
-  return found;
-}
 
 function mergeRanges(ranges: Array<{ start: number; end: number }>) {
   const sorted = [...ranges].sort((a, b) => a.start - b.start);
@@ -179,10 +154,51 @@ const removeSilence: Compiler = (state, step, context) => {
     return { ops: [], summary: 'No pause on the timeline is long enough to remove' };
   }
   const merged = mergeRanges(ranges);
-  const total = merged.reduce((sum, range) => sum + range.end - range.start, 0);
   return {
     ops: cutRangesOperations(state, merged, { excludeTrackIds: musicTrackIds(state) }),
-    summary: `Remove ${merged.length} pause${merged.length === 1 ? '' : 's'}, ${seconds(total)} in total`,
+    summary: `Remove ${merged.length} pause${merged.length === 1 ? '' : 's'}`,
+  };
+};
+
+function segmentsByMedia(context: CompileContext): Map<string, SourceSegment[]> {
+  const perMedia = new Map<string, SourceSegment[]>();
+  for (const segment of context.segments) {
+    const list = perMedia.get(segment.mediaId);
+    if (list) list.push(segment);
+    else perMedia.set(segment.mediaId, [segment]);
+  }
+  return perMedia;
+}
+
+const FILLER_WORD = /^(?:u+m+|u+h+|e+r+m*|a+h+|h+m+|m+h*m+|uhm+)[,.!?]*$/i;
+
+const removeFillerWords: Compiler = (state, _step, context) => {
+  if (context.segments.length === 0) {
+    throw new StepRejected('This needs a transcript, and the footage does not have one yet');
+  }
+  if (context.segments.every((segment) => segment.words.length === 0)) {
+    throw new StepRejected('The transcript has no word timings, so single words cannot be cut');
+  }
+  const frame = ticksPerFrame(state.frameRate);
+  const ranges = context.segments
+    .flatMap((segment) =>
+      segment.words
+        .filter((word) => FILLER_WORD.test(word.w.trim()))
+        .flatMap((word) =>
+          sourceToTimeline(state, {
+            mediaId: segment.mediaId,
+            start: secondsToTicks(word.s),
+            end: secondsToTicks(word.e),
+          }),
+        ),
+    )
+    .map(({ start, end }) => ({ start, end }))
+    .filter(({ start, end }) => end - start >= frame * 2);
+  if (ranges.length === 0) return { ops: [], summary: 'No filler words found on the timeline' };
+  const merged = mergeRanges(ranges);
+  return {
+    ops: cutRangesOperations(state, merged, { excludeTrackIds: musicTrackIds(state) }),
+    summary: `Remove ${merged.length} filler word${merged.length === 1 ? '' : 's'}`,
   };
 };
 
@@ -190,13 +206,9 @@ const removeRepeatedTakes: Compiler = (state, _step, context) => {
   if (context.segments.length === 0) {
     throw new StepRejected('This needs a transcript, and the footage does not have one yet');
   }
-  const perMedia = new Map<string, SourceSegment[]>();
-  for (const segment of context.segments) {
-    perMedia.set(segment.mediaId, [...(perMedia.get(segment.mediaId) ?? []), segment]);
-  }
   const ranges: Array<{ start: number; end: number }> = [];
   const lines: string[] = [];
-  for (const [mediaId, segments] of perMedia) {
+  for (const [mediaId, segments] of segmentsByMedia(context)) {
     for (const take of findRepeatedTakes(segments)) {
       const mapped = sourceToTimeline(state, { mediaId, start: take.start, end: take.end });
       if (mapped.length === 0) continue;
@@ -240,15 +252,22 @@ const cutToDuration: Compiler = (state, step, context) => {
     throw new StepRejected('Choosing what to keep needs a transcript, and there is none yet');
   }
 
-  // Rank each stretch of speech by the strongest moment it overlaps, then keep the best until the
-  // target is met. Everything kept stays in its original order, so the story still reads.
+  // Rank each stretch of speech, then keep the best until the target is met. Lines an editor chose
+  // come first, then the strongest moments, and earlier takes of a repeated line only as a last
+  // resort. Everything kept stays in its original order, so the story still reads.
+  const earlierTakes = [...segmentsByMedia(context)].flatMap(([mediaId, segments]) =>
+    findRepeatedTakes(segments).map((take) => ({ ...take, mediaId })),
+  );
+  const overlaps = (range: SourceRange, segment: SourceSegment) =>
+    range.mediaId === segment.mediaId && range.start < segment.end && range.end > segment.start;
   const spoken = context.segments.flatMap((segment) =>
     sourceToTimeline(state, segment).map(({ start, end }) => {
-      const score = context.moments
-        .filter((moment) => moment.mediaId === segment.mediaId)
-        .filter((moment) => moment.start < segment.end && moment.end > segment.start)
+      const strength = context.moments
+        .filter((moment) => overlaps(moment, segment))
         .reduce((best, moment) => Math.max(best, moment.score), 0);
-      return { start, end, score };
+      const chosen = context.editorialKeep?.some((range) => overlaps(range, segment)) ? 2 : 0;
+      const repeated = earlierTakes.some((take) => overlaps(take, segment)) ? -2 : 0;
+      return { start, end, score: strength + chosen + repeated };
     }),
   );
   const ranked = [...spoken].sort((a, b) => b.score - a.score || a.start - b.start);
@@ -734,6 +753,7 @@ const updateTransition = primitive((state, step) => {
 const COMPILERS: Record<PlanStep['operation'], Compiler> = {
   remove_silence: removeSilence,
   remove_repeated_takes: removeRepeatedTakes,
+  remove_filler_words: removeFillerWords,
   cut_range: cutRange,
   speed_range: speedRange,
   cut_to_duration: cutToDuration,
@@ -774,6 +794,7 @@ function compileRank(step: PlanStep): number {
     case 'remove_repeated_takes':
       return 1;
     case 'remove_silence':
+    case 'remove_filler_words':
       return 2;
     case 'cut_to_duration':
       return 3;
@@ -815,11 +836,18 @@ export function compilePlan(
   for (const { step, index } of order) {
     const header = { index, operation: step.operation, reason: step.reason };
     if (enabled && !enabled.has(index)) {
-      compiled.set(index, { ...header, summary: 'Left out', operationCount: 0, error: null });
+      compiled.set(index, {
+        ...header,
+        summary: 'Left out',
+        operationCount: 0,
+        secondsSaved: 0,
+        error: null,
+      });
       continue;
     }
     try {
       const outcome = COMPILERS[step.operation](state, step, context);
+      const before = editLength(state);
       state = applyOperations(state, outcome.ops, media).state;
       ops.push(...outcome.ops);
       shorts.push(...(outcome.shorts ?? []));
@@ -827,6 +855,7 @@ export function compilePlan(
         ...header,
         summary: outcome.summary,
         operationCount: outcome.ops.length,
+        secondsSaved: ticksToSeconds(before - editLength(state)),
         error: null,
       });
     } catch (err) {
@@ -835,6 +864,7 @@ export function compilePlan(
         ...header,
         summary: 'Cannot apply',
         operationCount: 0,
+        secondsSaved: 0,
         error: err.message,
       });
     }
@@ -845,6 +875,34 @@ export function compilePlan(
     ops,
     shorts,
     state,
+  };
+}
+
+/** Music is left alone by cuts, so it would hide how much shorter the edit itself became. */
+function editLength(state: TimelineState): number {
+  const last = spineClips(state).at(-1);
+  return last ? clipEnd(last) : timelineDuration(state);
+}
+
+const LARGE_CUT_SHARE = 0.5;
+
+/** What a compiled plan does to the edit's length, and a warning if that looks like a mistake. */
+export function assessPlan(
+  base: TimelineState,
+  compiled: CompiledPlan,
+  plan: AgentPlan,
+): { impact: AgentImpact | null; warnings: string[] } {
+  const before = editLength(base);
+  const after = editLength(compiled.state);
+  if (compiled.ops.length === 0 || before === 0) return { impact: null, warnings: [] };
+  const share = (before - after) / before;
+  const askedForLength = plan.steps.some((step) => step.operation === 'cut_to_duration');
+  return {
+    impact: { beforeSeconds: ticksToSeconds(before), afterSeconds: ticksToSeconds(after) },
+    warnings:
+      share > LARGE_CUT_SHARE && !askedForLength
+        ? [`This removes ${Math.round(share * 100)}% of the edit. Check it before applying.`]
+        : [],
   };
 }
 

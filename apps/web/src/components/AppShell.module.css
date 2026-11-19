@@ -14,7 +14,8 @@
   gap: 16px;
   height: var(--bar-height);
   padding: 0 var(--gutter);
-  background: var(--bg-1);
+  background: rgb(8 9 11 / 80%);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -31,19 +32,32 @@
 /* A playhead: the one mark the product is organised around. */
 .mark {
   position: relative;
-  width: 2px;
-  height: 16px;
-  background: var(--accent);
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--accent-solid);
 }
 
 .mark::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: -3px;
-  width: 8px;
-  height: 5px;
-  background: var(--accent);
+  top: 5px;
+  left: 10px;
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
+  background: #fff;
+}
+
+.mark::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  width: 6px;
+  height: 4px;
+  background: #fff;
   clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
 

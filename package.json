@@ -1,6 +1,12 @@
 {
   "name": "agent-edit",
   "private": true,
+  "description": "An AI-native video editor: describe the edit, review the agent's proposal as real timeline operations, and keep the final say.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/binitbarui9090/agent-edit.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.12"
@@ -16,9 +22,10 @@
     "build": "tsc -b && npm run build -w @agent-edit/web",
     "typecheck": "tsc -b && tsc -p apps/web/tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run",
-    "test:e2e": "node e2e/walkthrough.mjs && node --env-file-if-exists=.env e2e/media.mjs && node e2e/editor.mjs && node --env-file-if-exists=.env e2e/agent.mjs && node --env-file-if-exists=.env e2e/render.mjs",
+    "test:e2e": "node e2e/walkthrough.mjs && node --env-file-if-exists=.env e2e/media.mjs && node e2e/editor.mjs && node --env-file-if-exists=.env e2e/agent.mjs && node --env-file-if-exists=.env e2e/render.mjs && node --env-file-if-exists=.env e2e/start.mjs",
     "test:long": "node --env-file-if-exists=.env e2e/long-recording.mjs",
     "setup:whisper": "mkdir -p ~/.cache/agent-edit/whisper && curl -L --fail -o ~/.cache/agent-edit/whisper/ggml-base.en.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
+    "eval:agent": "tsx --conditions=source --env-file-if-exists=.env packages/ai-engine/eval/run.ts",
     "format": "prettier --write ."
   },
   "devDependencies": {

@@ -134,7 +134,8 @@ function contentSecurity(config: Config) {
     styleSrc: ["'self'", "'unsafe-inline'"],
     fontSrc: ["'self'"],
     imgSrc: ["'self'", 'data:', storage],
-    mediaSrc: ["'self'", storage],
+    // blob: lets the browser read a chosen file's shape before it uploads.
+    mediaSrc: ["'self'", storage, 'blob:'],
     connectSrc: ["'self'", storage, socketOrigin],
     objectSrc: ["'none'"],
     baseUri: ["'self'"],

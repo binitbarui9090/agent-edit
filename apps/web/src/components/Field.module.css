@@ -13,10 +13,19 @@
 .input {
   width: 100%;
   height: var(--control-height);
-  padding: 0 9px;
-  background: var(--bg-0);
-  border: 1px solid var(--line-strong);
+  padding: 0 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
+  transition:
+    border-color var(--fast),
+    box-shadow var(--fast);
+}
+
+.input:focus {
+  outline: 0;
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
 .input:hover {
@@ -41,5 +50,5 @@
 .formError {
   padding: 7px 10px;
   background: var(--danger-bg);
-  border-left: 2px solid var(--danger);
+  border-radius: var(--radius);
 }
